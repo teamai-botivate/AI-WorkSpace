@@ -1,0 +1,154 @@
+/* ── Botivate Design System ─────────────────────────────── */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ──────────────────────────────────────────────── */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    @apply border-slate-200/80;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    @apply bg-brand-500/20 text-brand-900;
+  }
+}
+
+/* ── Component Classes ────────────────────────────────── */
+
+@layer components {
+  /* Glass morphism */
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/30;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .glass-strong {
+    @apply bg-white/90 backdrop-blur-2xl border border-white/40;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-purple-600;
+  }
+
+  /* Cards */
+  .card {
+    @apply bg-white rounded-2xl border border-slate-200/60 shadow-glass;
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer;
+    @apply hover:shadow-card-hover hover:-translate-y-1 hover:border-brand-200/60;
+  }
+
+  /* Gradient icon container */
+  .icon-gradient {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center;
+    @apply shadow-lg shadow-black/5;
+  }
+
+  /* Feature pill */
+  .feature-pill {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-slate-100 text-slate-600 border border-slate-200/60;
+    @apply transition-colors duration-200;
+  }
+
+  /* Status dot */
+  .status-dot {
+    @apply w-2.5 h-2.5 rounded-full;
+  }
+
+  .status-dot-active {
+    @apply status-dot bg-emerald-500;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  }
+
+  .status-dot-inactive {
+    @apply status-dot bg-slate-300;
+  }
+
+  .status-dot-coming {
+    @apply status-dot bg-amber-400;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+  }
+
+  /* Button base */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl;
+    @apply bg-gradient-to-r from-brand-600 to-brand-700 text-white font-medium text-sm;
+    @apply shadow-lg shadow-brand-500/25;
+    @apply hover:shadow-xl hover:shadow-brand-500/30 hover:-translate-y-0.5;
+    @apply active:translate-y-0 active:shadow-md;
+    @apply transition-all duration-200;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl;
+    @apply text-slate-600 font-medium text-sm;
+    @apply hover:bg-slate-100 hover:text-slate-900;
+    @apply transition-all duration-200;
+  }
+
+  /* Shimmer loading */
+  .shimmer {
+    @apply relative overflow-hidden;
+    background: linear-gradient(
+      90deg,
+      transparent 25%,
+      rgba(255, 255, 255, 0.6) 50%,
+      transparent 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+}
+
+/* ── Scrollbar ────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
+
+/* ── Agent Shell Iframe ───────────────────────────────── */
+
+.agent-iframe {
+  width: 100%;
+  height: calc(100vh - 64px);
+  border: none;
+  border-radius: 0 0 16px 16px;
+  background: white;
+}

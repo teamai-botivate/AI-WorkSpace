@@ -1,0 +1,74 @@
+1. I want to build a Product which is called Botivate HR SUpport 
+2. I want that it works on the basis of Agentic Chatbot 
+3. i want that , when any complany wanna use this system ,then this system must adapt each and everything of that company only , i mean different comany can use it according to their own rules and regulations and policies and integration of Database
+4. i mean , the company's HR 1st off all open this system and register their company and add their rules and regulation in both form (documents or text form ) i mean ,  if they will fill the rules or regulations then they also fill their tiitle and  description and then rules and when they upload documents then they give fill the title and their description then upload the document and it must be dynamic add or delete more documents and rules and regulations as per the company and editable also for the future.
+Then , there will the option to connect their database with their title and description such as Google sheet , supabase , postgress , mongodba d excell sheet etc and they have the option to connect multiple databases  with their title and description 
+5. Now , i want that there will be the Agent which will adapt all of these according to the company , i mean is the HR or anybody of the company fill or upload or connect these thing then this system must work adapt all of these
+6. now , i want that this system must work on the basis of agentic chatbot, i mean there will be an agent which will adapt the databses and their schema (No amnual mapping) and use it 
+
+schema_prompt = f"""
+You are a database schema analyzer.
+
+Below are employee database columns:
+
+{headers}
+
+Identify:
+1. Primary employee identifier column.
+2. Group ALL columns logically.
+
+Return STRICT JSON:
+
+{{
+  "primary_key": "...",
+  "categories": {{
+      "category_name": ["col1","col2"]
+  }}
+}}
+"""
+
+schema_response = llm.invoke(schema_prompt)
+
+# 🔥 CLEAN JSON (IMPORTANT FIX)
+clean_json = re.sub(r"```json|```", "", schema_response.content).strip()
+
+schema_map = json.loads(clean_json)
+
+print(schema_map)
+
+7. And after analysation of whole configuration , schema and policies , the AI will finalise ki employee ya user se kya puchna h (jaise employee id , q ki ye primary key hoga) , during starting of Chat
+
+8. And after that , the AI will fetch the whole data of that employee id from the database and greet to the user
+
+9. And then this AI will understand the intent of the user's query and give the answer according to their data only and rules and regulations  
+
+10. And if any approval are required then AI will tell the user i need approval from the higher or seniors such as HR , Manager or CEO according to the user's or employee's query then the AI Send a  request with notification to the higher or seniors such as HR , Manager or CEO on the behalf of the user or employee with the required report of the user or employee  by which the higher or seniors can take the decision and update the existing databse according to the request then after approval or rejection , also update the existing database and notfy the user or employee about the approval or rejection
+
+11. And there will must be the option for urgent approval 
+
+12. Chatbot = Only Door
+
+No portal forms, no HR emails. Every action — leave, policy, grievance, resignation — starts from the chatbot.
+
+13. ID First, Always
+
+Every session: 'Enter your Employee ID.' AI fetches full profile silently before responding. No self-description needed.    
+
+14. Role-Based Access
+
+Employee → own data only. Manager → team data. HR Admin → all. CEO → analytics only. AI enforces this automatically.
+
+15. Every Action → DB
+
+Leave applied, approved, rejected, grievance filed, resignation submitted — all write to DB immediately with timestamp.
+
+16. Zero Auto-Approvals
+
+Every leave request needs a human decision. AI reminds after 48h. Escalates after 72h. Never decides on its own.
+
+17. AI Answers from YOUR Data
+
+Policy answers from company's uploaded docs. Balance from DB. AI never guesses or uses generic HR knowledge.
+
+
+    

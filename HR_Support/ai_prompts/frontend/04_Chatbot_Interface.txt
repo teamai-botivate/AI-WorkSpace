@@ -1,0 +1,8 @@
+Act as an expert Frontend Developer. We are continuing the "Botivate HR Support" React project.
+
+Step Task:
+1. Build the Main Chatbot Interface. Remember the core rule: "Chatbot = Only Door". There are no complex forms or dashboards for employees. Everything happens through the chat.
+2. The Chat UI must look like a premium, modern messenger (e.g., similar to Intercom or a sleek custom ChatGPT UI). It needs a large reading area, distinct message bubbles for the User and AI, and an input bar with attachment support.
+3. Build a "Notification Bell" system in the top corner. For Managers/HR, this bell will show pending actionable approvals. For Employees, it will show status updates (e.g., "Request Approved").
+4. Build interactive message components inside the chat. For example, if a Manager receives an approval request alert in their chat, render interactive "Approve" and "Reject" buttons directly inside the chat bubble itself.
+5. Make sure the component is completely flexible, connected to React state, and avoids hardcoded chat flows. Provide the complete code for this beautiful chat wrapper.

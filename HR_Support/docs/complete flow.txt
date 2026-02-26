@@ -1,0 +1,184 @@
+1. Product Name
+   - Botivate HR Support
+
+2. Core Concept
+   - The system works on an Agentic Chatbot architecture.
+   - AI agents handle understanding, decision flow, data access, and workflow execution.
+
+3. Multi-Company Adaptive System
+   - Any company can use this system.
+   - The system adapts automatically to:
+     - Company rules and regulations
+     - Internal policies
+     - Database structures
+     - Integrations
+   - Every company has its own configuration and isolated environment.
+
+4. Company Onboarding & Configuration Flow
+   - HR opens the system and registers their company.
+   - HR can add rules and regulations in two formats:
+
+     A. Text Form
+        - Title
+        - Description
+        - Rules/Policy content
+        - Editable anytime
+        - Add/Delete dynamically
+
+     B. Document Form
+        - Title
+        - Description
+        - Upload document (PDF/DOC/etc.)
+        - Editable
+        - Add/Delete dynamically
+
+   - Database Integration Section:
+     - Company can connect multiple databases.
+     - Each connection includes:
+       - Title
+       - Description
+       - Database type
+     - Supported examples:
+       - Google Sheets
+       - Supabase
+       - PostgreSQL
+       - MongoDB
+       - Excel Sheets
+     - Multiple databases allowed per company.
+
+5. Adaptive Agent Behavior
+   - AI Agent automatically adapts to:
+     - Uploaded rules
+     - Policy documents
+     - Connected databases
+   - No manual configuration required after upload.
+   - System learns company structure dynamically.
+
+6. Automatic Schema Adaptation (No Manual Mapping)
+   - Agent analyzes database schema automatically.
+   - AI identifies:
+     - Primary employee identifier
+     - Logical grouping of columns
+
+   Example Schema Analyzer Logic:
+
+   schema_prompt = f"""
+   You are a database schema analyzer.
+
+   Below are employee database columns:
+
+   {headers}
+
+   Identify:
+   1. Primary employee identifier column.
+   2. Group ALL columns logically.
+
+   Return STRICT JSON:
+
+   {{
+     "primary_key": "...",
+     "categories": {{
+         "category_name": ["col1","col2"]
+     }}
+   }}
+   """
+
+   schema_response = llm.invoke(schema_prompt)
+
+   # CLEAN JSON
+   clean_json = re.sub(r"```json|```", "", schema_response.content).strip()
+
+   schema_map = json.loads(clean_json)
+
+   print(schema_map)
+
+7. AI Pre-Chat Analysis
+   - After analyzing:
+     - Company configuration
+     - Policies
+     - Database schema
+   - AI decides what to ask first from the user.
+   - Example:
+     - Ask for Employee ID if it is identified as primary key.
+
+8. Session Start Flow
+   - User enters Employee ID.
+   - AI fetches complete employee data from database.
+   - AI greets the user using fetched data.
+
+9. Intent Understanding & Response
+   - AI understands user intent.
+   - Responses are generated strictly based on:
+     - Company policies
+     - Uploaded documents
+     - Employee data from database
+   - No generic HR assumptions.
+
+10. Approval Workflow System
+   - If approval is required:
+     - AI informs user that approval is needed.
+     - AI sends request to higher authority:
+       - HR
+       - Manager
+       - CEO
+     - Request includes:
+       - Employee details
+       - Required report
+       - Context of request
+     - Authority makes decision.
+     - Database updates automatically:
+       - Approval/Rejection status
+       - Timestamp
+     - User receives notification about final decision.
+
+11. Urgent Approval Option
+   - Requests can be marked as urgent.
+   - Higher priority notifications are sent.
+
+12. Chatbot = Only Door
+   - No portal forms.
+   - No HR emails.
+   - Every action starts from chatbot:
+     - Leave request
+     - Policy queries
+     - Grievance
+     - Resignation
+     - Approvals
+
+13. ID First Policy
+   - Every session starts with:
+     - “Enter your Employee ID.”
+   - AI fetches full profile silently.
+   - User does not need to explain who they are.
+
+14. Role-Based Access Control (RBAC) 
+   - Employee:
+     - Access only own data.
+   - Manager:
+     - Access team data.
+   - HR Admin:
+     - Access all data.
+   - CEO:
+     - Access analytics only.
+   - AI enforces access automatically.
+
+15. Every Action Writes to Database
+   - All actions update DB immediately with timestamp:
+     - Leave applied
+     - Approval/Rejection
+     - Grievance submission
+     - Resignation
+     - Any workflow event
+
+16. Zero Auto-Approvals Policy
+   - AI never approves requests on its own.
+   - Every approval requires human decision.
+   - Reminder rules:
+     - Reminder after 48 hours
+     - Escalation after 72 hours
+
+17. AI Answers from Company Data Only
+   - Policy answers → Company uploaded documents.
+   - Balances/status → Database data.
+   - AI never guesses.
+   - No generic HR knowledge used unless explicitly allowed.

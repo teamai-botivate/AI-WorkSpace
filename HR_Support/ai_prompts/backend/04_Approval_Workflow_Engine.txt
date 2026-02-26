@@ -1,0 +1,10 @@
+Act as an expert Backend Developer. We are continuing the "Botivate HR Support" FastAPI project.
+
+Step Task:
+1. Build the Approval Workflow Engine. The system follows a "Zero Auto-Approval Policy". This means the AI itself can NEVER approve any request.
+2. If an employee asks the AI for something that needs approval (like a Leave Request or Resignation), the AI must record this transaction in the database as "Pending" with a specific timestamp.
+3. The system must immediately send a notification request to the higher authority (Manager, HR, CEO) including the employee details and the context of the request.
+4. Give the AI the ability to mark a request as "Urgent" if the user specifies it.
+5. Build background logic (like a cron job or background task) to check for pending requests. Apply these rules dynamically: Send a reminder after 48 hours, and escalate after 72 hours.
+6. Create endpoints for authorities to formally Approve or Reject these requests. Ensure every single action writes immediately to the database (Google Sheet / DB) to maintain a complete audit trail.
+7. Ensure the code is modular so that any new type of workflow event can be added in the future without breaking the core system.

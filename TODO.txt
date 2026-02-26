@@ -1,0 +1,92 @@
+═══════════════════════════════════════════════════════════
+  BOTIVATE AI WORKSPACE — Remaining Tasks
+  Updated: 2026-02-26
+═══════════════════════════════════════════════════════════
+
+── PHASE 1: INSTALLATION & TESTING ─────────────────────
+
+[ ] Install frontend shell dependencies
+    → cd frontend && npm install
+
+[ ] Install gateway backend dependencies
+    → cd backend && uv venv --python 3.12 && uv pip install -r requirements.txt
+
+[ ] Verify HR_Support agent venv & deps exist
+    → cd HR_Support/backend && check .venv
+
+[ ] Verify Resume-Screening-Agent venv & deps exist
+    → cd Resume-Screening-Agent && check .venv
+
+[ ] Run start-dev.ps1 and test full flow
+    → .\start-dev.ps1
+    → Open http://localhost:3000
+    → Verify both agent cards appear
+    → Click HR Recruiter → iframe loads port 5174
+    → Click HR Support → iframe loads port 5175
+
+[ ] Test gateway health API
+    → http://localhost:9000/docs
+    → GET /api/agents/health/all
+
+
+── PHASE 2: REMAINING AGENTS (Build One by One) ────────
+
+[ ] Production, Inventory & Purchase Agent
+    → Create folder: agents/production/
+    → Backend: FastAPI (port 8002)
+    → Frontend: React (port 5176)
+    → Features: Order-driven planning, stock alerts, PO management
+    → Add entry to workspace.config.json
+
+[ ] Sales, Marketing & Service Agent
+    → Create folder: agents/sales/
+    → Backend: FastAPI (port 8003)
+    → Frontend: React (port 5177)
+    → Features: Lead tracking, complaint handling, service tracking
+    → Add entry to workspace.config.json
+
+[ ] Store, Maintenance & Repair Agent
+    → Create folder: agents/maintenance/
+    → Backend: FastAPI (port 8004)
+    → Frontend: React (port 5178)
+    → Features: Asset tracking, preventive maintenance, spare parts
+    → Add entry to workspace.config.json
+
+[ ] AI Operations Monitor + MIS Agent
+    → Create folder: agents/operations-mis/
+    → Backend: FastAPI (port 8005)
+    → Frontend: React (port 5179)
+    → Features: Control panel, stage visibility, MIS auto-generation
+    → Add entry to workspace.config.json
+
+
+── PHASE 3: SUPER AGENT ────────────────────────────────
+
+[ ] Build Super Agent (Router / Orchestrator)
+    → Create folder: agents/super-agent/
+    → Backend: FastAPI + LangGraph (port 8006)
+    → This agent calls ALL other agents' APIs
+    → Cross-department analysis
+    → "What's the biggest problem today?"
+    → Immediate action recommendations
+    → Add entry to workspace.config.json
+
+
+── PHASE 4: PRODUCTION READINESS ───────────────────────
+
+[ ] Create docker-compose.yml for all services
+[ ] Add Nginx reverse proxy config
+[ ] Environment-based config (dev/staging/prod)
+[ ] Auth system for main shell (company login)
+[ ] Add dark mode toggle (theme from config)
+[ ] Add real-time WebSocket health monitoring
+[ ] CI/CD pipeline setup
+
+
+── NOTES ───────────────────────────────────────────────
+
+- Each agent is INDEPENDENT — own backend + frontend
+- Adding a new agent = add folder + add config entry
+- workspace.config.json is the SINGLE SOURCE OF TRUTH
+- No hardcoded ports, names, or URLs anywhere
+- Frontend shell reads everything from config dynamically

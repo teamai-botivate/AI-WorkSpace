@@ -1,0 +1,7 @@
+Act as an expert Frontend Developer. We are continuing the "Botivate HR Support" React project.
+
+Step Task:
+1. Build a beautiful "Single Entry Point" Login Page. It should cleanly ask for: Role (Employee / Manager / HR / Admin), Company ID, Employee ID, and Password.
+2. Create an "In-Chat Company Support & Help Card" component. This card must dynamically display the specific company's support email and contact info. Do not hardcode the support details; expect it to come from the backend.
+3. This Support Card should be accessible easily from the login page, especially if the user faces login failures like forgetting a password (The AI never resets passwords directly).
+4. Implement standard React context/state to manage the authenticated user session, ensuring protected routes so that only logged-in users can reach the HR Dashboard or Chatbot interfaces.

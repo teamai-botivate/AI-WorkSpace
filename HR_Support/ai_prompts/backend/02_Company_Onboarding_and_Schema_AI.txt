@@ -1,0 +1,10 @@
+Act as an expert AI & Backend Developer. We are continuing the "Botivate HR Support" FastAPI project.
+Tech Stack: FastAPI, Langchain, Pydantic, Python.
+
+Step Task:
+1. Build an API endpoint for Company Onboarding. HR should be able to register their company, upload text-based policies, upload document-based policies (PDF/DOC), and connect their Google Sheet.
+2. Build the "Automatic Schema Adaptation" feature using Langchain. When a Google Sheet is connected, use an LLM to automatically analyze the column headers. The LLM must identify: the primary employee ID, communication columns (email, phone), the employee name, and logically group the rest of the columns. Return this map as a strictly parsed Pydantic model. DO NOT ask the user to manually map columns.
+3. Once the schema is automatically analyzed, build a script that programmatically adds a new column named "system_password" to that Google Sheet without breaking anything.
+4. Auto-generate a secure random password for every employee present in the sheet and save it in that column.
+5. Create a function to send an email to each employee with their Company ID, Employee ID, auto-generated password, and login link. The email MUST be sent using the HR's configured company email, not a generic system email.
+6. Provide fully working, easily editable code. Keep everything dynamic.

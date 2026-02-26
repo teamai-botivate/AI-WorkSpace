@@ -1,0 +1,11 @@
+Act as an expert AI Engineer. We are continuing the "Botivate HR Support" FastAPI project.
+Tech Stack: LangGraph, Langchain, FastAPI, Python.
+
+Step Task:
+1. Build the core Agentic Chatbot engine using LangGraph. This is an "ID-First" system.
+2. When a user logs in, automatically fetch their full profile from their specific company's Google Sheet and pass it to the LangGraph state. The AI must silently know who they are and greet them properly.
+3. Implement Role-Based Access Control (RBAC). Employees can only access their own data, Managers access team data, HR accesses all data. The AI must enforce this dynamically.
+4. Integrate a RAG (Retrieval-Augmented Generation) system. The AI must ONLY answer policy questions based on the specific company's uploaded documents and text rules. It must NEVER use generic HR knowledge or guess answers.
+5. The AI must be equipped with tools (Langchain Tools) to fetch real-time employee data directly from the associated Google Sheet (like checking leave balance).
+6. Create the LangGraph nodes for: Intent Understanding, Document Search, and Database Query calculation.
+7. Provide the complete routing logic, agent graph, and the chat API endpoint. Do not use hardcoded company variables.

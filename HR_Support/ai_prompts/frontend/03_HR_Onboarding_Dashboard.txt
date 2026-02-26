@@ -1,0 +1,11 @@
+Act as an expert Frontend Developer. We are continuing the "Botivate HR Support" React project.
+
+Step Task:
+1. Build the Company Onboarding Dashboard flow specifically for the HR Admin.
+2. Create dynamic, modern form steps for HR to:
+   - Enter their primary Company Details.
+   - Add Rules & Regulations dynamically in Text format (Title, Description, Rules). Add a button to easily append or remove rows for new rules.
+   - Upload Policy Documents (Drag-and-drop interface for PDF/DOC files).
+3. Build a "Database Integration" UI step. Provide a clean dropdown to select a database type (focusing on Google Sheets for now) and an input section to handle the connection details/links.
+4. Provide good user feedback (snackbars/toast notifications) and an aesthetically pleasing multistep progress indicator.
+5. The UI must be structured to send a clean JSON payload to the backend without asking the user to manually map out database columns (since the AI handles mapping automatically).

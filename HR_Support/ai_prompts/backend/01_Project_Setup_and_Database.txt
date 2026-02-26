@@ -1,0 +1,10 @@
+Act as an expert Backend Developer. We are building a dynamic Multi-Company HR System called "Botivate HR Support". 
+Tech Stack: FastAPI, Pydantic, Python.
+
+Step Task:
+1. Initialize the FastAPI application with proper CORS settings.
+2. We need a dynamic database connection system. Create an abstract interface (Base Adapter) for database connections so we can easily plug in any database in the future (like PostgreSQL, MongoDB).
+3. For now, implement the default database adapter for "Google Sheets". 
+4. The system must support multiple companies. Every company will have an isolated environment. Create a "master database" structure (using SQLite or a simple JSON file for now, which can be changed later) to store registered companies and their configurations.
+5. Provide the exact folder structure and all the code required for this initial setup. 
+6. Very Important: Ensure the code is highly flexible, modular, and has NO hardcoded company details, API keys, or logic. Make it clean and production-ready.

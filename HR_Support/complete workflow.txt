@@ -1,0 +1,457 @@
+PRODUCT NAME
+------------
+Botivate HR Support
+
+
+SYSTEM OVERVIEW
+---------------
+Botivate HR Support is an Agentic AI–powered HR system where:
+- Chatbot is the ONLY interaction layer
+- AI agents handle understanding, decision-making, data access, and workflow execution
+- The system adapts automatically for each company without manual configuration
+
+
+==================================================
+STEP 1: MULTI-COMPANY REGISTRATION & ISOLATION
+==================================================
+
+1. HR registers a company in the system.
+2. On successful registration:
+   - A unique Company ID is generated.
+   - A completely isolated environment is created for that company.
+   - No data, policies, or databases are shared across companies.
+
+Each company gets:
+- Separate rules & policies
+- Separate databases
+- Separate AI memory & context
+- Separate approval hierarchy
+
+
+==================================================
+STEP 2: COMPANY RULES & POLICY CONFIGURATION
+==================================================
+
+HR can configure company policies in TWO formats:
+
+A) TEXT-BASED POLICIES
+---------------------
+- Title
+- Description
+- Full policy/rule text
+- Editable anytime
+- Can be added or deleted dynamically
+
+B) DOCUMENT-BASED POLICIES
+-------------------------
+- Title
+- Description
+- Upload document (PDF / DOC / etc.)
+- Editable anytime
+- Can be added or deleted dynamically
+
+AI Agent Responsibilities:
+- Reads all policies
+- Understands rules, constraints, and approvals
+- Uses ONLY these documents for HR-related answers
+
+
+==================================================
+STEP 3: DATABASE INTEGRATION (MULTI-SOURCE)
+==================================================
+
+HR connects company databases.
+
+Each database connection includes:
+- Title
+- Description
+- Database Type
+
+Supported Examples:
+- Google Sheets
+- Excel Sheets
+- Supabase
+- PostgreSQL
+- MongoDB
+
+Rules:
+- Multiple databases allowed per company
+- No manual schema mapping
+- AI analyzes everything automatically
+
+
+==================================================
+STEP 4: AUTOMATIC SCHEMA ADAPTATION (CRITICAL STEP)
+==================================================
+
+AI Agent scans employee-related sheets/tables.
+
+The agent identifies ALL of the following automatically:
+
+1. PRIMARY EMPLOYEE IDENTIFIER
+   - Example: Employee ID / Emp Code / Staff ID
+
+2. COMMUNICATION IDENTIFIERS
+   - Email ID
+   - Phone Number
+   - WhatsApp Number
+
+3. BASIC EMPLOYEE IDENTITY
+   - Employee Name
+
+4. LOGICAL GROUPING OF ALL COLUMNS
+   - Personal Information
+   - Job Information
+   - Leave / Attendance
+   - Payroll / Benefits
+   - Status / Meta Data
+
+STRICT OUTPUT FORMAT (AI INTERNAL):
+----------------------------------
+{
+  "primary_key": "employee_id",
+  "employee_name": "full_name",
+  "email": "email_id",
+  "phone": "phone_number",
+  "whatsapp": "whatsapp_number",
+  "categories": {
+    "personal": [...],
+    "job": [...],
+    "leave": [...],
+    "payroll": [...]
+  }
+}
+
+Purpose:
+- Primary Key → Identification
+- Email / Phone / WhatsApp → Notifications
+- Name → Personalization
+- Categories → Contextual AI responses
+
+
+==================================================
+STEP 5: AUTO PASSWORD & AGENT COLUMN CREATION
+==================================================
+
+After schema analysis:
+
+1. AI Agent automatically:
+   - Creates a NEW column in employee sheet/table:
+     → "system_password" (or equivalent)
+
+2. For EACH employee:
+   - A secure password is auto-generated
+   - Password is mapped to:
+     - Company ID
+     - Employee ID (Primary Key)
+
+3. No manual HR action required.
+
+
+==================================================
+STEP 6: EMPLOYEE CREDENTIAL DISTRIBUTION
+==================================================
+
+For each employee, the system sends credentials via EMAIL (and later WhatsApp).
+
+Email Content Includes:
+- Company ID
+- Employee ID
+- Auto-generated Password
+- System Login Link
+
+Important Rule:
+- Email is sent FROM the HR’s registered company email
+- Not from a generic system address
+- Builds trust and authenticity
+
+
+==================================================
+STEP 7: LOGIN SYSTEM (SINGLE ENTRY POINT)
+==================================================
+
+Login Page Fields:
+- Role Selection (Employee / Manager / HR / Admin)
+- Company ID
+- Employee ID
+- Password
+
+After Login:
+- User session is created
+- AI context is locked to:
+  - That company
+  - That role
+  - That employee record
+
+
+==================================================
+STEP 8: ID-FIRST SESSION START
+==================================================
+
+System rule:
+- Every session starts with identity verification
+- No anonymous access
+
+Flow:
+1. User logs in
+2. AI silently fetches:
+   - Full employee profile
+   - Role
+   - Reporting hierarchy
+3. AI greets user personally using fetched data
+
+User never needs to explain who they are.
+
+
+==================================================
+STEP 9: ADAPTIVE AGENT BEHAVIOR
+==================================================
+
+AI Agent dynamically adapts based on:
+- Company rules
+- Uploaded documents
+- Database schema
+- User role
+
+No hardcoded logic.
+No company-specific coding.
+
+
+==================================================
+STEP 10: INTENT UNDERSTANDING & RESPONSE CONTROL
+==================================================
+
+AI responses are generated STRICTLY from:
+- Company policies
+- Uploaded documents
+- Live database data
+
+Rules:
+- No guessing
+- No generic HR knowledge
+- No assumptions
+
+Example:
+- Leave balance → Database only
+- Policy explanation → Uploaded document only
+
+
+==================================================
+STEP 11: APPROVAL WORKFLOW ENGINE
+==================================================
+
+If a request requires approval:
+1. AI informs the user
+2. AI sends request to:
+   - Manager / HR / CEO (as per policy)
+3. Request includes:
+   - Employee details
+   - Context
+   - Supporting data
+
+Authority Action:
+- Approve or Reject
+
+System Updates:
+- Database status updated
+- Timestamp saved
+- User notified
+
+
+==================================================
+STEP 12: URGENT & ESCALATION RULES
+==================================================
+
+- Requests can be marked as URGENT
+- High-priority notifications sent
+
+Reminder Rules:
+- Reminder after 48 hours
+- Escalation after 72 hours
+
+
+==================================================
+STEP 13: CHATBOT = ONLY DOOR
+==================================================
+
+No:
+- HR forms
+- Emails
+- External portals
+
+Everything happens via chatbot:
+- Leave
+- Grievance
+- Resignation
+- Policy queries
+- Approvals
+
+
+==================================================
+STEP 14: ROLE-BASED ACCESS CONTROL (RBAC)
+==================================================
+
+Employee:
+- Own data only
+
+Manager:
+- Team data only
+
+HR Admin:
+- All employee data
+
+CEO:
+- Analytics only
+
+AI enforces access automatically.
+
+
+==================================================
+STEP 15: DATABASE-FIRST SYSTEM
+==================================================
+
+Every action:
+- Writes immediately to database
+- Includes timestamp
+- Is fully auditable
+
+No shadow state.
+No manual syncing.
+
+
+==================================================
+STEP 16: ZERO AUTO-APPROVAL POLICY
+==================================================
+
+Rules:
+- AI NEVER approves anything
+- Human approval is mandatory
+- AI only assists & routes requests
+
+System remains compliant & auditable.
+
+
+==================================================
+STEP 17: IN-CHAT COMPANY SUPPORT & HELP CARD
+==================================================
+
+Purpose:
+- Ensure users can contact THEIR OWN COMPANY directly
+- No dependency on platform support
+- Company-controlled communication channel
+
+-----------------------------------------------
+SUPPORT CARD / NOTE (VISIBLE INSIDE CHATBOT)
+-----------------------------------------------
+
+A persistent card or note is displayed inside the chatbot interface.
+
+This card is:
+- Always visible (or accessible via "Help" / "Support")
+- Company-specific
+- Auto-loaded after login
+
+-----------------------------------------------
+WHAT THE SUPPORT CARD DISPLAYS
+-----------------------------------------------
+
+The card contains:
+
+1. COMPANY SUPPORT CONTACT
+   - Company Support Email ID
+   - Optional: Support Phone Number
+   - Optional: WhatsApp Contact
+
+2. COMMON ISSUE CONTEXT
+   - Password forgotten
+   - Login issues
+   - Access-related problems
+   - Any company-specific support message
+
+Example Message Shown to User:
+--------------------------------
+"If you face any issue like password reset, login failure, 
+or access problem, please contact your company support."
+
+-----------------------------------------------
+DATA SOURCE (IMPORTANT)
+-----------------------------------------------
+
+Support details are fetched from:
+- Company configuration set during onboarding
+- NOT hardcoded
+- NOT platform-level
+
+Each company defines:
+- Support email
+- Support phone (optional)
+- Support WhatsApp (optional)
+
+-----------------------------------------------
+BEHAVIOR RULES
+-----------------------------------------------
+
+1. AI NEVER handles:
+   - Password reset directly
+   - Manual credential recovery
+
+2. AI ALWAYS:
+   - Redirects the user to company support
+   - Shows the support card automatically
+
+3. AI Response Example:
+--------------------------------
+"I can’t reset your password directly.
+Please contact your company support using the details below."
+
+-----------------------------------------------
+SECURITY & TRUST BENEFITS
+-----------------------------------------------
+
+- Employees contact their OWN HR / IT team
+- No third-party interference
+- Clear responsibility ownership
+- Reduced misuse or social engineering risks
+
+-----------------------------------------------
+VISIBILITY CONDITIONS
+-----------------------------------------------
+
+The support card appears:
+- On login screen (optional)
+- After failed login attempts
+- Inside chatbot (always accessible)
+- When user types:
+  - "Forgot password"
+  - "Login issue"
+  - "Account problem"
+  - Similar intents
+
+-----------------------------------------------
+FINAL IMPACT
+-----------------------------------------------
+
+This ensures:
+- Zero confusion for employees
+- Faster issue resolution
+- Company-controlled support flow
+- Clean separation between:
+  - Platform AI
+  - Company responsibility
+
+
+==================================================
+FINAL RESULT
+==================================================
+
+Botivate HR Support becomes:
+- Fully agentic
+- Company-adaptive
+- Secure
+- Auditable
+- Zero-manual-configuration HR system
+
+One chatbot.
+One login.
+One source of truth.
+

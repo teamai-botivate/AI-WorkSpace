@@ -1,0 +1,10 @@
+Act as an expert Frontend Developer. We are building the User Interface for a dynamic HR System called "Botivate HR Support".
+Design Focus: Professional, Minimalist UI, premium feeling, smooth micro-animations.
+Tech Stack: React, Tailwind CSS.
+
+Step Task:
+1. Initialize the React app and properly configure Tailwind CSS without any messy configurations. Define a vibrant but professional color palette and ensure it naturally supports Dark Mode.
+2. Create the main generic layout components for the Single Page Application (Navbar, Main Container, Footer).
+3. Build a set of highly reusable, premium-looking modern UI components using Tailwind: Custom Buttons (with hover effects), Input Fields, clean Cards with soft shadows, and Modals.
+4. Because the system supports multiple companies, the UI must feel neutral, sleek, and premium for any brand. 
+5. Do NOT hardcode any company logos, colors, or names. Make the foundational UI code highly modular and editable. Provide the complete setup and the structure for these base components.
