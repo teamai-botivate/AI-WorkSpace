@@ -51,9 +51,16 @@ export function WelcomeBanner({ workspace, totalAgents }: WelcomeBannerProps) {
             </div>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2 tracking-tight">
-            Welcome to {workspace.name}
-          </h1>
+          <div className="flex items-center gap-4 mb-2">
+            <img
+              src="/botivate-logo.png"
+              alt="Botivate"
+              className="w-14 h-14 sm:w-16 sm:h-16 object-contain drop-shadow-lg bg-white/15 rounded-xl p-1.5"
+            />
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+              Welcome to {workspace.name}
+            </h1>
+          </div>
           <p className="text-base sm:text-lg text-white/80 max-w-xl">
             {workspace.tagline}. Select an AI agent below to get started.
           </p>

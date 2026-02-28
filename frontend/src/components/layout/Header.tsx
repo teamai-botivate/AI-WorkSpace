@@ -3,7 +3,7 @@
  * Shows company branding (from config) + agent name when inside an agent.
  */
 
-import { ArrowLeft, LayoutDashboard, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import type { WorkspaceMeta, AgentConfig } from "@/types/workspace.types";
 import { getAgentIcon } from "@/utils/iconMap";
@@ -61,14 +61,11 @@ export function Header({ workspace, selectedAgent, onBack }: HeaderProps) {
               </>
             ) : (
               <>
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg"
-                  style={{
-                    background: `linear-gradient(135deg, ${workspace.theme.primaryColor}, ${workspace.theme.accentColor})`,
-                  }}
-                >
-                  <LayoutDashboard className="w-4.5 h-4.5 text-white" />
-                </div>
+                <img
+                  src="/botivate-logo.png"
+                  alt="Botivate"
+                  className="w-9 h-9 object-contain"
+                />
                 <div>
                   <h1 className="text-lg font-bold text-slate-900 leading-tight tracking-tight">
                     {workspace.name}
