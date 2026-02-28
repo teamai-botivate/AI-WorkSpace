@@ -31,10 +31,11 @@ export interface AgentBackendConfig {
 export interface AgentFrontendConfig {
   port: number;
   url: string;
-  type: "vite" | "static" | "next";
+  type: "vite" | "static" | "next" | "unified";
   startCommand: string;
   workDir: string;
   env?: Record<string, string>;
+  deployed?: boolean;
 }
 
 export interface AgentConfig {

@@ -1,35 +1,36 @@
 ═══════════════════════════════════════════════════════════
-  BOTIVATE AI WORKSPACE — Remaining Tasks
-  Updated: 2026-02-26
+  BOTIVATE AI WORKSPACE — Task Tracker
+  Updated: 2026-02-28
 ═══════════════════════════════════════════════════════════
 
-── PHASE 1: INSTALLATION & TESTING ─────────────────────
+  For detailed progress: see PROGRESS.md
+  For setup instructions: see SETUP.md
+  For adding agents: see AGENT_INTEGRATION_GUIDE.md
 
-[ ] Install frontend shell dependencies
-    → cd frontend && npm install
+── PHASE 1: CORE INFRASTRUCTURE (COMPLETED) ────────────
 
-[ ] Install gateway backend dependencies
-    → cd backend && uv venv --python 3.12 && uv pip install -r requirements.txt
+[x] Design config-driven architecture
+[x] Create workspace.config.json (single source of truth)
+[x] Build Gateway Backend (FastAPI, port 9000)
+[x] Build Frontend Shell (React + Vite + Tailwind, port 3000)
+[x] Implement dynamic agent card rendering
+[x] Implement iframe-based agent loading
+[x] Add health monitoring (gateway polls backends)
+[x] Build one-click launcher (start-dev.ps1)
+[x] Add deployed agent support (Render/cloud)
+[x] Set up Git repo + .gitignore
+[x] Install all dependencies
+[x] Test full end-to-end flow
+[x] Write documentation (README, SETUP, INTEGRATION, PROGRESS)
 
-[ ] Verify HR_Support agent venv & deps exist
-    → cd HR_Support/backend && check .venv
+── PHASE 2: AI AGENTS (2/7 COMPLETED) ─────────────────
 
-[ ] Verify Resume-Screening-Agent venv & deps exist
-    → cd Resume-Screening-Agent && check .venv
+[x] HR Recruiter & Screener (Resume-Screening-Agent, port 8000)
+    → JD Generator, Resume Screening, Aptitude Tests, Gmail
+[x] HR Employee Support (HR_Support, deployed on Render)
+    → Leave Mgmt, Policy RAG, Approvals, LangGraph Chatbot
 
-[ ] Run start-dev.ps1 and test full flow
-    → .\start-dev.ps1
-    → Open http://localhost:3000
-    → Verify both agent cards appear
-    → Click HR Recruiter → iframe loads port 5174
-    → Click HR Support → iframe loads port 5175
-
-[ ] Test gateway health API
-    → http://localhost:9000/docs
-    → GET /api/agents/health/all
-
-
-── PHASE 2: REMAINING AGENTS (Build One by One) ────────
+── PHASE 2 (REMAINING): BUILD ONE BY ONE ──────────────
 
 [ ] Production, Inventory & Purchase Agent
     → Create folder: agents/production/

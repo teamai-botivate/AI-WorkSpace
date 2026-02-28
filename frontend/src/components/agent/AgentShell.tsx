@@ -69,8 +69,8 @@ export function AgentShell({ agent, onBack }: AgentShellProps) {
           <div>
             <span className="text-sm font-medium text-slate-700">{agent.name}</span>
             <span className="text-xs text-slate-400 ml-2">
-              {agent.backend.deployed ? (
-                <span className="text-emerald-500">☁ Deployed</span>
+              {(agent.backend.deployed || agent.frontend.deployed) ? (
+                <span className="text-emerald-500">Deployed</span>
               ) : (
                 <>Port {agent.frontend.port}</>
               )}

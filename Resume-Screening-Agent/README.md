@@ -134,7 +134,17 @@ graph TD
 ```bash
 git clone https://github.com/Prabhat9801/Agentic_ATS_Scorer.git
 cd Agentic_ATS_Scorer
-pip install -r requirements.txt
+
+# Create virtual environment (using uv)
+uv venv --python 3.10
+.venv\Scripts\Activate.ps1      # Windows
+# source .venv/bin/activate     # Linux/Mac
+
+# Install dependencies
+uv pip install -r requirements.txt
+
+# Install spaCy language model (REQUIRED)
+python -m spacy download en_core_web_sm
 ```
 
 ### 2. Configuration (.env)

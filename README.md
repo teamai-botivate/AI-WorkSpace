@@ -1,174 +1,259 @@
-# 🚀 Botivate — AI Workforce Portal
+# Botivate — AI Workforce Portal
 
-**A unified, config-driven AI workspace that connects multiple independent AI agents under one professional dashboard.**
+> **One platform. Every department. AI-powered.**
 
-Each agent has its own backend and frontend — the main shell dynamically discovers and launches them from a single config file.
+![Version](https://img.shields.io/badge/version-1.0.0-6366f1)
+![Agents](https://img.shields.io/badge/agents-2%20active%20%7C%205%20planned-green)
+![Stack](https://img.shields.io/badge/stack-React%20%2B%20FastAPI%20%2B%20LangGraph-blue)
 
 ---
 
-## 🏗️ Architecture
+## Vision & Idea
+
+**Botivate** is a **unified AI Workforce Management Portal** that replaces manual, disconnected department workflows with intelligent, autonomous AI agents — all accessible from a single dashboard.
+
+### The Problem
+
+In most organizations, every department (HR, Sales, Production, Maintenance, Operations) runs its own tools, spreadsheets, and manual processes. There is no single view, no cross-department intelligence, and no automation connecting them.
+
+### Our Solution
+
+A **config-driven micro-frontend architecture** where:
+
+- Each **department** gets its own **AI Agent** (independent backend + frontend)
+- All agents are orchestrated through a **single portal** (the Botivate Shell)
+- A **Super Agent** (planned) will connect all agents for cross-department intelligence
+- **Zero hardcoding** — adding a new agent = 1 folder + 1 config entry
+- Supports both **local** and **cloud-deployed** agents simultaneously
+
+### Target Users
+
+| Role | AI Agents Serving Them |
+|------|----------------------|
+| HR Teams | Automated recruiting, employee support, leave management |
+| Production Managers | Order-driven production planning, stock alerts |
+| Sales Teams | Lead tracking, complaint handling, service automation |
+| Maintenance | Asset tracking, preventive schedules, spare parts |
+| Operations / MIS | Real-time dashboards, auto-generated reports |
+| Leadership | Super Agent — cross-department insights & actions |
+
+---
+
+## Architecture
+
+```
+┌───────────────────────────────────────────────────────────┐
+│              Botivate Frontend Shell (React:3000)          │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐               │
+│   │ Agent    │  │ Agent    │  │ Agent    │  ...           │
+│   │ Card 1   │  │ Card 2   │  │ Card N   │               │
+│   └────┬─────┘  └────┬─────┘  └────┬─────┘               │
+│        │iframe       │iframe       │iframe                │
+│   ┌────▼─────┐  ┌────▼─────┐  ┌────▼─────┐               │
+│   │ Agent 1  │  │ Agent 2  │  │ Agent N  │               │
+│   │ Frontend │  │ Frontend │  │ Frontend │               │
+│   └──────────┘  └──────────┘  └──────────┘               │
+└────────────────────────┬──────────────────────────────────┘
+                         │ /api/*
+                ┌────────▼────────┐
+                │  Gateway API    │
+                │  (FastAPI:9000) │
+                └────────┬────────┘
+                         │ reads
+                ┌────────▼────────┐
+                │ workspace       │
+                │ .config.json    │  ← Single Source of Truth
+                └─────────────────┘
+```
+
+**Design Principles:**
+
+| Principle | How |
+|-----------|-----|
+| Config-Driven | `workspace.config.json` controls all ports, URLs, features, status |
+| Micro-Frontend | Each agent frontend runs in an iframe, fully isolated |
+| Independent Agents | Each agent has its own backend, frontend, venv, dependencies |
+| Hybrid Deployment | Agents can run locally OR be deployed remotely (Render, AWS) |
+| Gateway Pattern | Central API for config, health checks, agent discovery |
+| One-Click Launch | `start-dev.ps1` reads config and starts everything |
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Frontend Shell | React 18 + TypeScript 5 + Vite 6 + Tailwind 3 | Main portal UI |
+| Gateway | FastAPI + httpx + Pydantic | Config server, health checks |
+| Agent Backends | FastAPI + LangChain/LangGraph + OpenAI GPT-4o | Individual AI services |
+| Agent Frontends | React / Vanilla JS / Any framework | Loaded via iframe |
+| Vector DB | ChromaDB | RAG and semantic search |
+| LLM | OpenAI GPT-4o | AI analysis, chat, generation |
+| NLP | spaCy + HuggingFace BART-large-MNLI | Resume parsing, role matching |
+| Launcher | PowerShell (`start-dev.ps1`) | One-click startup |
+
+---
+
+## Project Structure
 
 ```
 AI_Workspace/
+├── README.md                          # This file
+├── SETUP.md                           # Installation & setup guide
+├── AGENT_INTEGRATION_GUIDE.md         # How to add new agents
+├── PROGRESS.md                        # Completed vs remaining work
+├── TODO.txt                           # Detailed task breakdown
+├── start-dev.ps1                      # One-click dev launcher
+├── .gitignore                         # Master ignore rules
+│
 ├── config/
-│   └── workspace.config.json    ← Master config (agents, ports, theme)
+│   └── workspace.config.json          # SINGLE SOURCE OF TRUTH
 │
-├── backend/                     ← Gateway API (FastAPI)
+├── backend/                           # Gateway API (port 9000)
+│   ├── requirements.txt
 │   └── app/
-│       ├── main.py              ← Agent registry, health checks, config API
-│       └── config.py            ← Config loader
+│       ├── main.py                    # Gateway endpoints
+│       └── config.py                  # Config loader
 │
-├── frontend/                    ← Main Shell (React + Tailwind + Vite)
+├── frontend/                          # Main Shell (port 3000)
+│   ├── package.json
+│   ├── vite.config.ts
 │   └── src/
-│       ├── App.tsx              ← Shell: Dashboard or Agent iframe
+│       ├── App.tsx                    # Dashboard ↔ Agent Shell router
+│       ├── context/WorkspaceContext   # Config provider (fetches /api/config)
+│       ├── types/workspace.types.ts   # All TypeScript interfaces
 │       ├── components/
-│       │   ├── layout/          ← Header
-│       │   ├── dashboard/       ← Dashboard, AgentCard, Stats, Welcome
-│       │   ├── agent/           ← AgentShell (iframe loader)
-│       │   └── common/          ← LoadingScreen, ErrorScreen, ComingSoon
-│       ├── context/             ← WorkspaceContext (config provider)
-│       ├── types/               ← TypeScript interfaces
-│       └── utils/               ← Icon mapping
+│       │   ├── layout/Header.tsx      # Navigation bar
+│       │   ├── dashboard/             # Dashboard, AgentCard, StatsBar, WelcomeBanner
+│       │   ├── agent/AgentShell.tsx   # Iframe wrapper + health toolbar
+│       │   └── common/               # Loading, Error, ComingSoon screens
+│       └── utils/iconMap.ts           # Lucide icon resolver
 │
-├── HR_Support/                  ← Agent: HR Employee Support (full-stack)
-│   ├── backend/                 ← FastAPI + LangGraph + RAG
-│   └── frontend/                ← React + Tailwind
+├── Resume-Screening-Agent/            # Agent 1: HR Recruiter (LOCAL)
+│   ├── Backend/                       # FastAPI unified server (port 8000)
+│   ├── Frontend/                      # Vanilla JS UI
+│   ├── JD_Generator/                  # Sub-tool: JD creation
+│   └── Aptitude_Generator/            # Sub-tool: Test generation
 │
-├── Resume-Screening-Agent/      ← Agent: HR Recruiter & Screener (full-stack)
-│   ├── Backend/                 ← FastAPI + GPT-4o + ChromaDB
-│   ├── Frontend/                ← Vanilla HTML/JS
-│   ├── JD_Generator/            ← Sub-module: JD creation
-│   └── Aptitude_Generator/      ← Sub-module: Test generation
-│
-└── start-dev.ps1                ← One-click launcher (reads config → starts all)
+└── HR_Support/                        # Agent 2: HR Support (DEPLOYED)
+    ├── backend/                       # FastAPI + LangGraph + RAG
+    └── frontend/                      # React + Vite
 ```
 
 ---
 
-## ✨ Key Design Principles
+## Quick Start
 
-| Principle | Implementation |
-|-----------|---------------|
-| **Zero Hardcoding** | All agent names, ports, URLs come from `workspace.config.json` |
-| **Config-Driven** | Add a new agent = add one entry in config + drop the folder |
-| **Multi-Company Ready** | Change company name/logo/theme in config = instant white-label |
-| **Independent Agents** | Each agent has its own backend + frontend, runs on its own ports |
-| **Iframe Integration** | Agent frontends load inside the shell via iframe — zero code changes to existing agents |
-| **Gateway Health Checks** | Central API checks which agents are online/offline in real-time |
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **Node.js 18+** & **npm**
-- **Python 3.12+**
-- **uv** (Python package manager) — `pip install uv`
-
-### 1. Clone
-```bash
+```powershell
+# 1. Clone the repository
 git clone https://github.com/teamai-botivate/AI-WorkSpace.git
 cd AI-WorkSpace
-```
 
-### 2. Install Frontend Shell
-```bash
-cd frontend
-npm install
-cd ..
-```
+# 2. Install (see SETUP.md for full details)
+cd frontend; npm install; cd ..
 
-### 3. Install Gateway Backend
-```bash
-cd backend
-uv venv --python 3.12
-.venv/Scripts/Activate.ps1   # Windows
-uv pip install -r requirements.txt
-cd ..
-```
-
-### 4. Setup Agent Backends
-Each agent folder has its own setup. See their respective READMEs:
-- `HR_Support/README.md`
-- `Resume-Screening-Agent/README.md`
-
-**Important:** Create `.env` files from `.env.example` in each agent folder.
-
-### 5. Launch Everything
-```powershell
+# 3. Launch everything
 .\start-dev.ps1
+
+# 4. Open browser → http://localhost:3000
 ```
 
-This reads `config/workspace.config.json` and starts:
-- All active agent backends & frontends
-- The gateway API (port 9000)
-- The main shell (port 3000)
-
-Open **http://localhost:3000** in your browser.
-
-### Stop All Services
-```powershell
-.\start-dev.ps1 -Stop
-```
+> **Full installation guide:** [SETUP.md](SETUP.md)
+>
+> **Add your own agent:** [AGENT_INTEGRATION_GUIDE.md](AGENT_INTEGRATION_GUIDE.md)
+>
+> **Track progress:** [PROGRESS.md](PROGRESS.md)
 
 ---
 
-## 📦 Adding a New Agent
+## Active Agents
 
-1. **Create the agent folder** with its own backend + frontend
-2. **Add an entry** in `config/workspace.config.json`:
-```json
-{
-  "id": "my-new-agent",
-  "name": "My New Agent",
-  "description": "What this agent does",
-  "icon": "Bot",
-  "gradient": ["#f59e0b", "#d97706"],
-  "status": "active",
-  "category": "Operations",
-  "features": ["Feature 1", "Feature 2"],
-  "backend": {
-    "port": 8002,
-    "healthCheck": "/docs",
-    "startCommand": "uvicorn app.main:app --port 8002 --reload",
-    "workDir": "my-new-agent/backend"
-  },
-  "frontend": {
-    "port": 5176,
-    "url": "http://localhost:5176",
-    "type": "vite",
-    "startCommand": "npm run dev -- --port 5176",
-    "workDir": "my-new-agent/frontend"
-  }
-}
-```
-3. **Run** `.\start-dev.ps1` — the new agent auto-appears on the dashboard.
+### 1. HR Recruiter & Screener — Local (Port 8000)
+
+| Feature | Description |
+|---------|-------------|
+| JD Generator | AI-powered Job Description creation from simple inputs |
+| Resume Screening | Upload resumes, AI scores/ranks/shortlists candidates |
+| Aptitude Generator | Auto-generate technical assessments for shortlisted candidates |
+| Email Automation | Gmail integration for interview invites and rejections |
+| Scoring Engine | Zero-Shot NLI + Vector Embeddings + GPT-4o Deep Read |
+
+### 2. HR Employee Support — Deployed on Render
+
+| Feature | Description |
+|---------|-------------|
+| Leave Management | Apply, approve, reject leaves with AI assistance |
+| Policy RAG | Upload policies, chatbot answers employee questions |
+| Approval Workflows | Multi-level approval chains powered by LangGraph |
+| Employee Lifecycle | Onboarding, transfers, exits managed by AI |
+| Grievance System | File and track employee grievances |
 
 ---
 
-## 🛡️ Security
+## How It Works
 
-- **No credentials are committed.** All secrets live in `.env` files (git-ignored).
-- Copy `.env.example` files to `.env` and fill in your keys.
-- The master `.gitignore` blocks: `.env`, `credentials.json`, `token.json`, `service-account.json`, `client_secret*.json`, `chroma_data/`, `uploads/`, etc.
-
----
-
-## 📋 Current Agents
-
-| Agent | Status | Backend Port | Frontend Port |
-|-------|--------|-------------|--------------|
-| HR Recruiter & Screener | ✅ Active | 8000 | 5174 |
-| HR Employee Support | ✅ Active | 8001 | 5175 |
+1. **`workspace.config.json`** defines all agents (ports, URLs, features, deployment status)
+2. **Gateway** reads config and exposes it via REST API (`/api/config`, `/api/agents`)
+3. **Frontend Shell** fetches config on load → renders agent cards on dashboard
+4. **User clicks an agent** → Shell loads that agent's frontend in an iframe
+5. **Health monitoring** — Gateway polls each agent's health endpoint
+6. **Deployed agents** → iframe points to the remote URL (e.g., Render) instead of localhost
 
 ---
 
-## 🗺️ Roadmap
+## Gateway API
 
-See `TODO.txt` for the detailed remaining tasks.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/config` | Full workspace configuration |
+| `GET` | `/api/health` | Gateway health check |
+| `GET` | `/api/agents` | List all active agents |
+| `GET` | `/api/agents/{id}` | Get specific agent config |
+| `GET` | `/api/agents/{id}/health` | Check specific agent health |
+| `GET` | `/api/agents/health/all` | Health status of all agents |
+
+Interactive docs: `http://localhost:9000/docs`
 
 ---
 
-## 📄 License
+## Adding a New Agent
 
-Private — Botivate Team
+No code changes to the shell or gateway required.
+
+1. Create your agent folder with backend + frontend
+2. Add **one entry** to `config/workspace.config.json`
+3. Run `start-dev.ps1` — it auto-discovers and launches your agent
+
+> **Full guide with examples:** [AGENT_INTEGRATION_GUIDE.md](AGENT_INTEGRATION_GUIDE.md)
+
+---
+
+## Scripts
+
+| Command | What it does |
+|---------|-------------|
+| `.\start-dev.ps1` | Start all services (reads config dynamically) |
+| `.\start-dev.ps1 -Stop` | Kill all running services |
+| `cd frontend && npm run dev` | Start only the frontend shell |
+| `cd backend && uvicorn app.main:app --port 9000 --reload` | Start only the gateway |
+
+---
+
+## Environment Variables
+
+Each agent has its own `.env` file (never committed). Common variables:
+
+| Variable | Used By | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | All AI agents | OpenAI API key |
+| `GOOGLE_API_KEY` | Resume Screener | Gmail API credentials |
+| `VITE_API_URL` | HR Support FE | Backend URL |
+| `DATABASE_URL` | HR Support BE | PostgreSQL connection |
+
+---
+
+## Team
+
+**TeamAI Botivate** — Building the future of AI-powered workforce management.
+
+GitHub: [github.com/teamai-botivate](https://github.com/teamai-botivate)

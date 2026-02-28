@@ -32,10 +32,10 @@
         "activateVenv": "Resume-Screening-Agent/.venv/Scripts/Activate.ps1"
       },
       "frontend": {
-        "port": 5174,
-        "url": "http://localhost:5174",
-        "type": "static",
-        "startCommand": "python -m http.server 5174",
+        "port": 8000,
+        "url": "http://localhost:8000",
+        "type": "unified",
+        "startCommand": "",
         "workDir": "Resume-Screening-Agent/Frontend"
       }
     },
@@ -60,8 +60,9 @@
       },
       "frontend": {
         "port": 5175,
-        "url": "http://localhost:5175",
+        "url": "https://botivate-hr-support.onrender.com",
         "type": "vite",
+        "deployed": true,
         "startCommand": "npm run dev -- --port 5175",
         "workDir": "HR_Support/frontend",
         "env": {
