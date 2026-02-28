@@ -124,10 +124,11 @@ export default function DashboardPage() {
   const handleSend = async () => {
     if (!inputText.trim()) return;
 
+    const userMessage = inputText;
     const newMsg = {
       id: Date.now(),
       type: 'human',
-      text: inputText,
+      text: userMessage,
       timestamp: new Date().toISOString()
     };
 
@@ -135,39 +136,108 @@ export default function DashboardPage() {
     setInputText('');
     setIsTyping(true);
 
-    // Send to backend agent
+    const token = localStorage.getItem('auth_token');
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    console.log(`[FRONTEND LOG] 👉 Sending Chat Message (SSE Stream): "${userMessage}"`);
+
     try {
-      const token = localStorage.getItem('auth_token');
-      console.log(`[FRONTEND LOG] 👉 Sending Chat Message to Agent: "${inputText}"`);
-      const response = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/chat/send`, 
-        { message: inputText },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
-      console.log(`[FRONTEND LOG] ✅ Received Chat Reply:`, response.data);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          type: 'ai',
-          text: response.data.reply,
-          timestamp: new Date().toISOString()
+      // Use SSE streaming for real-time token-by-token response
+      const response = await fetch(`${apiUrl}/api/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message: userMessage })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+
+      // Create a placeholder AI message that we'll update with streaming tokens
+      const aiMsgId = Date.now() + 1;
+      setMessages(prev => [...prev, {
+        id: aiMsgId,
+        type: 'ai',
+        text: '',
+        timestamp: new Date().toISOString()
+      }]);
+      setIsTyping(false); // Hide "Thinking..." since we're showing real text
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        // Parse SSE data lines
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.token) {
+                fullText += data.token;
+                // Update the AI message in-place with accumulated text
+                setMessages(prev => prev.map(msg => 
+                  msg.id === aiMsgId ? { ...msg, text: fullText } : msg
+                ));
+              } else if (data.done) {
+                fullText = data.reply || fullText;
+                setMessages(prev => prev.map(msg => 
+                  msg.id === aiMsgId ? { ...msg, text: fullText } : msg
+                ));
+              } else if (data.error) {
+                console.error("[FRONTEND ERROR] Stream error:", data.error);
+              }
+            } catch (parseErr) {
+              // Skip malformed lines
+            }
+          }
         }
-      ]);
+      }
+
+      console.log(`[FRONTEND LOG] ✅ Stream complete. Total length: ${fullText.length}`);
+
     } catch (error) {
-      console.error("[FRONTEND ERROR] ❌ Chat Message Failed to send/receive:", error);
-      console.error("[FRONTEND ERROR] Response Details:", error.response?.data);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          type: 'ai',
-          text: "I'm sorry, I'm having trouble connecting to the system right now. Please try again.",
-          timestamp: new Date().toISOString()
-        }
-      ]);
-    } finally {
+      console.error("[FRONTEND ERROR] ❌ Chat Stream Failed:", error);
       setIsTyping(false);
+
+      // Remove the empty placeholder AI message (from failed stream)
+      setMessages(prev => prev.filter(msg => !(msg.type === 'ai' && msg.text === '')));
+
+      // Fallback: try non-streaming endpoint
+      try {
+        console.log("[FRONTEND LOG] 🔄 Falling back to non-streaming endpoint...");
+        const fallbackResponse = await axios.post(`${apiUrl}/api/chat/send`, 
+          { message: userMessage },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setMessages(prev => [
+          ...prev,
+          {
+            id: Date.now() + 2,
+            type: 'ai',
+            text: fallbackResponse.data.reply,
+            timestamp: new Date().toISOString()
+          }
+        ]);
+      } catch (fallbackError) {
+        console.error("[FRONTEND ERROR] ❌ Fallback also failed:", fallbackError);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: Date.now() + 2,
+            type: 'ai',
+            text: "I'm sorry, I'm having trouble connecting to the system right now. Please try again.",
+            timestamp: new Date().toISOString()
+          }
+        ]);
+      }
     }
   };
 
