@@ -97,10 +97,15 @@ async def check_agent_health(agent_id: str):
     backend = agent.get("backend", {})
     port = backend.get("port")
     health_endpoint = backend.get("healthCheck", "/docs")
-    url = f"http://localhost:{port}{health_endpoint}"
+
+    # Support deployed (remote) backends
+    if backend.get("deployed") and backend.get("deployedUrl"):
+        url = f"{backend['deployedUrl'].rstrip('/')}{health_endpoint}"
+    else:
+        url = f"http://localhost:{port}{health_endpoint}"
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url)
             healthy = resp.status_code < 400
             return {
@@ -109,6 +114,7 @@ async def check_agent_health(agent_id: str):
                 "status": "running" if healthy else "error",
                 "port": port,
                 "url": url,
+                "deployed": backend.get("deployed", False),
             }
     except httpx.ConnectError:
         return {
@@ -117,6 +123,7 @@ async def check_agent_health(agent_id: str):
             "status": "offline",
             "port": port,
             "url": url,
+            "deployed": backend.get("deployed", False),
         }
     except Exception as e:
         return {
@@ -125,6 +132,7 @@ async def check_agent_health(agent_id: str):
             "status": "error",
             "port": port,
             "error": str(e),
+            "deployed": backend.get("deployed", False),
         }
 
 
@@ -134,12 +142,16 @@ async def check_all_agents_health():
     agents = get_active_agents()
     results = []
 
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         for agent in agents:
             backend = agent.get("backend", {})
             port = backend.get("port")
             health_endpoint = backend.get("healthCheck", "/docs")
-            url = f"http://localhost:{port}{health_endpoint}"
+
+            if backend.get("deployed") and backend.get("deployedUrl"):
+                url = f"{backend['deployedUrl'].rstrip('/')}{health_endpoint}"
+            else:
+                url = f"http://localhost:{port}{health_endpoint}"
 
             try:
                 resp = await client.get(url)
@@ -149,6 +161,7 @@ async def check_all_agents_health():
                     "healthy": resp.status_code < 400,
                     "status": "running",
                     "port": port,
+                    "deployed": backend.get("deployed", False),
                 })
             except Exception:
                 results.append({
@@ -157,6 +170,7 @@ async def check_all_agents_health():
                     "healthy": False,
                     "status": "offline",
                     "port": port,
+                    "deployed": backend.get("deployed", False),
                 })
 
     return {

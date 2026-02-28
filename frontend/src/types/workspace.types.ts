@@ -24,6 +24,8 @@ export interface AgentBackendConfig {
   workDir: string;
   envFile?: string;
   activateVenv?: string;
+  deployed?: boolean;
+  deployedUrl?: string;
 }
 
 export interface AgentFrontendConfig {
@@ -65,6 +67,7 @@ export interface AgentHealthStatus {
   healthy: boolean;
   status: "running" | "offline" | "error";
   port: number;
+  deployed?: boolean;
 }
 
 export interface AllAgentsHealth {

@@ -51,6 +51,8 @@
       "backend": {
         "port": 8001,
         "healthCheck": "/docs",
+        "deployed": true,
+        "deployedUrl": "https://botivate-hr-support.onrender.com",
         "startCommand": "uvicorn app.main:app --port 8001 --reload",
         "workDir": "HR_Support/backend",
         "envFile": "HR_Support/backend/.env",
@@ -63,7 +65,7 @@
         "startCommand": "npm run dev -- --port 5175",
         "workDir": "HR_Support/frontend",
         "env": {
-          "VITE_API_URL": "http://localhost:8001"
+          "VITE_API_URL": "https://botivate-hr-support.onrender.com"
         }
       }
     }

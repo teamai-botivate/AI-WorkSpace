@@ -79,25 +79,29 @@ foreach ($agent in $Config.agents) {
 
     Write-Host "┌─ Starting: $($agent.name)" -ForegroundColor Yellow
 
-    # Start Backend
-    $backendDir = Join-Path $WorkspaceRoot $agent.backend.workDir
-    if (Test-Path $backendDir) {
-        $backendCmd = $agent.backend.startCommand
-        $venvPath = if ($agent.backend.activateVenv) { 
-            Join-Path $WorkspaceRoot $agent.backend.activateVenv 
-        } else { $null }
-
-        $startScript = ""
-        if ($venvPath -and (Test-Path $venvPath)) {
-            $startScript = "cd '$backendDir'; & '$venvPath'; $backendCmd"
-        } else {
-            $startScript = "cd '$backendDir'; $backendCmd"
-        }
-
-        Start-Process powershell -ArgumentList "-NoExit", "-Command", $startScript -WindowStyle Minimized
-        Write-Host "│  ✅ Backend  → port $($agent.backend.port)" -ForegroundColor Green
+    # Start Backend (skip if deployed remotely)
+    if ($agent.backend.deployed -eq $true) {
+        Write-Host "│  ☁️  Backend  → DEPLOYED at $($agent.backend.deployedUrl)" -ForegroundColor Cyan
     } else {
-        Write-Host "│  ⚠️  Backend dir not found: $backendDir" -ForegroundColor DarkYellow
+        $backendDir = Join-Path $WorkspaceRoot $agent.backend.workDir
+        if (Test-Path $backendDir) {
+            $backendCmd = $agent.backend.startCommand
+            $venvPath = if ($agent.backend.activateVenv) { 
+                Join-Path $WorkspaceRoot $agent.backend.activateVenv 
+            } else { $null }
+
+            $startScript = ""
+            if ($venvPath -and (Test-Path $venvPath)) {
+                $startScript = "cd '$backendDir'; & '$venvPath'; $backendCmd"
+            } else {
+                $startScript = "cd '$backendDir'; $backendCmd"
+            }
+
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", $startScript -WindowStyle Minimized
+            Write-Host "│  ✅ Backend  → port $($agent.backend.port)" -ForegroundColor Green
+        } else {
+            Write-Host "│  ⚠️  Backend dir not found: $backendDir" -ForegroundColor DarkYellow
+        }
     }
 
     # Start Frontend

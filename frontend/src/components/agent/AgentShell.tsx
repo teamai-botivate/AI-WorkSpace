@@ -69,7 +69,11 @@ export function AgentShell({ agent, onBack }: AgentShellProps) {
           <div>
             <span className="text-sm font-medium text-slate-700">{agent.name}</span>
             <span className="text-xs text-slate-400 ml-2">
-              Port {agent.frontend.port}
+              {agent.backend.deployed ? (
+                <span className="text-emerald-500">☁ Deployed</span>
+              ) : (
+                <>Port {agent.frontend.port}</>
+              )}
             </span>
           </div>
           {loading && (
@@ -123,7 +127,9 @@ export function AgentShell({ agent, onBack }: AgentShellProps) {
               Could not connect to <code className="px-1.5 py-0.5 bg-slate-100 rounded text-xs font-mono">{iframeUrl}</code>
             </p>
             <p className="text-xs text-slate-400 mb-4">
-              Make sure the agent's frontend server is running on port {agent.frontend.port}
+              {agent.backend.deployed
+                ? "The deployed service might be starting up. Render free-tier can take ~30s."
+                : `Make sure the agent's frontend server is running on port ${agent.frontend.port}`}
             </p>
           </div>
           <div className="flex gap-3">
