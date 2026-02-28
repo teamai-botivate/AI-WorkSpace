@@ -33,7 +33,7 @@ export function Header({ workspace, selectedAgent, onBack }: HeaderProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Logo + Title */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             {selectedAgent ? (
               <>
                 <button
@@ -64,7 +64,7 @@ export function Header({ workspace, selectedAgent, onBack }: HeaderProps) {
                 <img
                   src="/botivate-logo.png"
                   alt="Botivate"
-                  className="w-9 h-9 object-contain"
+                  className="w-20 h-20 -mr-5 object-contain"
                 />
                 <div>
                   <h1 className="text-lg font-bold text-slate-900 leading-tight tracking-tight">

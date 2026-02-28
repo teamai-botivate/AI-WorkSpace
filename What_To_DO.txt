@@ -1,0 +1,15 @@
+Ab suno , mujhe isse kaise banana h 
+
+1. ye pura AI workspace multiple companies ko dena h poora code ke sath aur fir unke id se ya unke server pe jaake deploy karna 
+
+2. To Setup process v simple hona chahiye , ki ek baar koi company apne credinetials setup kare to saare agents ache se kaam kare , sb kkuch setup ek baar me hi ho jaaye 
+
+3. Iske baad uss company waale isse use kar sake apne hisab se , completey dunamic chaiye ki kisis v company se setup kar sake 
+
+4. Humara kuch v nhi rakhna h ,credentials and  eacha nd everything companies apna apna apna daalegi aur Assani se setup ho jaaye , saare agents me v automatically dynamicaally integrate ho jaaye jarurat ke hisab se 
+
+5. HR Support me se registration process hatana h , jb koi HR Support open kare pahli baar to direct Google sheet connectiona dn policy wala aur email aur id and password wala pricess ho uiske baad koi v employee and kkoi v apne id and password se login kar sake , aur chat kar sake agent se 
+
+6. aur agar jarurat pare to hum sirf ek agent ka v ya not total but kuch agent ka v code unhe de to wo v asani se setup ho jaaye 
+
+Tum kya kya samjhe , mujhe batao , aur koi clarification chahiye to pusho , aur kuch v puchna h to pucho aur batao isme kya kya improvements karna h , aur specially hume banana kya h 

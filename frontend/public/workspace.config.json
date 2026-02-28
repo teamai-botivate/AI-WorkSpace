@@ -4,8 +4,8 @@
     "tagline": "AI-Powered Workforce Management",
     "version": "1.0.0",
     "theme": {
-      "primaryColor": "#6366f1",
-      "accentColor": "#8b5cf6",
+      "primaryColor": "#2563eb",
+      "accentColor": "#06b6d4",
       "mode": "light"
     }
   },
@@ -50,9 +50,7 @@
       "features": ["Leave Management", "Policy RAG", "Approval Workflows", "Employee Lifecycle"],
       "backend": {
         "port": 8001,
-        "healthCheck": "/docs",
-        "deployed": true,
-        "deployedUrl": "https://botivate-hr-support.onrender.com",
+        "healthCheck": "/health",
         "startCommand": "uvicorn app.main:app --port 8001 --reload",
         "workDir": "HR_Support/backend",
         "envFile": "HR_Support/backend/.env",
@@ -60,13 +58,12 @@
       },
       "frontend": {
         "port": 5175,
-        "url": "https://botivate-hr-support.onrender.com",
+        "url": "http://localhost:5175",
         "type": "vite",
-        "deployed": true,
-        "startCommand": "npm run dev -- --port 5175",
+        "startCommand": "npm run dev",
         "workDir": "HR_Support/frontend",
         "env": {
-          "VITE_API_URL": "https://botivate-hr-support.onrender.com"
+          "VITE_API_URL": "http://localhost:8001"
         }
       }
     }
