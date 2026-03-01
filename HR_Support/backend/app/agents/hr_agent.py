@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from app.config import settings
 from app.services.rag_service import answer_from_policies
-from app.adapters.adapter_factory import get_cached_adapter
+from app.adapters.adapter_factory import get_adapter
 from app.models.models import DatabaseType
 
 
@@ -291,12 +291,10 @@ async def handle_data_query(state: AgentState) -> AgentState:
         # Use the employee_data already verified by chat_router if available
         own_record = state.get("employee_data", {})
         
-        # Get ONE cached adapter for the entire data query (reuses OAuth connection)
-        db_type = DatabaseType(state.get("db_type", "google_sheets"))
-        adapter = await get_cached_adapter(db_type, state["db_config"])
-        
         if not own_record:
-            print(f"[{state['company_id']}][AGENT DATA QUERY] Fetching own record via cached adapter...")
+            print(f"[{state['company_id']}][AGENT DATA QUERY] Checking adapter for direct own_record fetch...")
+            db_type = DatabaseType(state.get("db_type", "google_sheets"))
+            adapter = await get_adapter(db_type, state["db_config"])
             own_record = await adapter.get_record_by_key(primary_key, employee_id, table_name=validated_schema.master_table) or {}
         
         # Step 2: Pydantic verification — ensure record belongs to THIS employee
@@ -312,7 +310,9 @@ async def handle_data_query(state: AgentState) -> AgentState:
                 print(f"[{state['company_id']}][AGENT DATA QUERY] ✅ Pydantic verified own record: {employee_id} == {found_id}")
             except ValueError as ve:
                 print(f"[{state['company_id']}][AGENT DATA QUERY] ❌ Pydantic verification FAILED for own record: {ve}")
-                # Record doesn't match! Re-fetch with strict matching (reuse cached adapter)
+                # Record doesn't match! Re-fetch with strict matching
+                db_type = DatabaseType(state.get("db_type", "google_sheets"))
+                adapter = await get_adapter(db_type, state["db_config"])
                 master_table = validated_schema.master_table
                 all_records = await adapter.get_all_records(table_name=master_table)
                 own_record = None
@@ -326,28 +326,13 @@ async def handle_data_query(state: AgentState) -> AgentState:
                     state["actions"] = []
                     return state
 
-        # Fetch child table records — SELECTIVE: only tables relevant to the query
+        # Fetch child table records related to this employee or static small tables
         child_tables_data = {}
         if validated_schema.child_tables:
-            user_q_lower = state["current_input"].lower()
-            all_child_names = list(validated_schema.child_tables.keys())
-            
-            # Filter: only fetch tables whose name matches keywords in the query
-            relevant_tables = []
-            for tname in all_child_names:
-                tname_lower = tname.lower().replace("_", " ").replace("-", " ")
-                tname_words = tname_lower.split()
-                # Include if any word from the table name appears in the query
-                if any(w in user_q_lower for w in tname_words if len(w) > 2):
-                    relevant_tables.append(tname)
-            
-            # If no specific match, include all (user asked generic question like "my details")
-            generic_keywords = ["detail", "data", "information", "record", "profile", "everything", "all", "sab", "sabhi", "mera", "meri"]
-            if not relevant_tables or any(kw in user_q_lower for kw in generic_keywords):
-                relevant_tables = all_child_names
-            
-            print(f"[{state['company_id']}][AGENT DATA QUERY] Fetching {len(relevant_tables)}/{len(all_child_names)} child tables: {relevant_tables}")
-            for child_table_name in relevant_tables:
+            print(f"[{state['company_id']}][AGENT DATA QUERY] Extracting data from child tables...")
+            db_type = DatabaseType(state.get("db_type", "google_sheets"))
+            adapter = await get_adapter(db_type, state["db_config"])
+            for child_table_name in validated_schema.child_tables.keys():
                 try:
                     all_child_recs = await adapter.get_all_records(table_name=child_table_name)
                     # Filter for records belonging to this employee
@@ -382,6 +367,8 @@ async def handle_data_query(state: AgentState) -> AgentState:
         if role in ("hr", "admin", "manager") or any(kw in user_question for kw in team_keywords):
             if any(kw in user_question for kw in team_keywords):
                 print(f"[{state['company_id']}][AGENT DATA QUERY] Team/Dashboard keywords detected. Pulling team data context.")
+                db_type = DatabaseType(state.get("db_type", "google_sheets"))
+                adapter = await get_adapter(db_type, state["db_config"])
                 master_table = validated_schema.master_table
                 records = await adapter.get_all_records(table_name=master_table)
                 extra_context = f"\n\nAdditional team data (you have {role} access. Total employees: {len(records)}):\n{json.dumps(records[:50], indent=2, default=str)}"

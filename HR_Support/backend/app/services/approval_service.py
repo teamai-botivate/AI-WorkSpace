@@ -12,7 +12,7 @@ from app.models.models import (
     ApprovalRequest, Notification, Company, RequestStatus, RequestPriority, UserRole,
 )
 from app.models.schemas import ApprovalRequestCreate, ApprovalDecision
-from app.adapters.adapter_factory import get_cached_adapter
+from app.adapters.adapter_factory import get_adapter
 from app.utils.email_service import send_oauth_email, NOTIFICATION_TEMPLATE
 from app.agents.hr_agent import get_llm
 from langchain_core.messages import HumanMessage
@@ -34,7 +34,7 @@ async def generate_summary_report(db: AsyncSession, company_id: str, employee_id
     emp_data = {}
     if db_conn and db_conn.schema_map:
         try:
-            adapter = await get_cached_adapter(db_conn.db_type, db_conn.connection_config)
+            adapter = await get_adapter(db_conn.db_type, db_conn.connection_config)
             pk = db_conn.schema_map.get("primary_key", "")
             emp_data = await adapter.get_record_by_key(pk, employee_id)
 

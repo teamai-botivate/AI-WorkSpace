@@ -19,7 +19,7 @@ from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from app.config import settings
-from app.adapters.adapter_factory import get_cached_adapter
+from app.adapters.adapter_factory import get_adapter
 from app.models.models import DatabaseType
 
 
@@ -64,7 +64,7 @@ def get_db_llm() -> ChatOpenAI:
 async def connect_and_read_schema(state: DBAgentState) -> DBAgentState:
     """Connect to the database and read current headers/schema."""
     try:
-        adapter = await get_cached_adapter(
+        adapter = await get_adapter(
             DatabaseType(state["db_type"]), 
             state["connection_config"]
         )
@@ -101,7 +101,7 @@ async def read_employee_data(state: DBAgentState) -> DBAgentState:
         return state  # Skip if previous node failed
     
     try:
-        adapter = await get_cached_adapter(
+        adapter = await get_adapter(
             DatabaseType(state["db_type"]),
             state["connection_config"]
         )
@@ -242,7 +242,7 @@ async def execute_updates(state: DBAgentState) -> DBAgentState:
         return state
     
     try:
-        adapter = await get_cached_adapter(
+        adapter = await get_adapter(
             DatabaseType(state["db_type"]),
             state["connection_config"]
         )
@@ -307,7 +307,7 @@ async def verify_updates(state: DBAgentState) -> DBAgentState:
         return state
     
     try:
-        adapter = await get_cached_adapter(
+        adapter = await get_adapter(
             DatabaseType(state["db_type"]),
             state["connection_config"]
         )
