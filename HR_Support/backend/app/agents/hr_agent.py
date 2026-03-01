@@ -1,15 +1,10 @@
 """
 Botivate HR Support - LangGraph Agentic Chatbot Engine
 Core agent with nodes for Intent Understanding, Policy Search, DB Query, and Approval Routing.
-
-OPTIMIZED v2:
-- Faster intent classification (max_tokens=30)
-- Streaming support (chat_with_agent_stream) for SSE
-- Employee data cache integration
 """
 
 import json
-from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict, Annotated
+from typing import Any, Dict, List, Optional, TypedDict, Annotated
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.graph import StateGraph, END
@@ -50,34 +45,13 @@ class AgentState(TypedDict):
     sheet_sync_result: Optional[Dict[str, Any]]  # Result of Google Sheet sync operation
 
 
-# ── LLM Instances ────────────────────────────────────────
+# ── LLM Instance ─────────────────────────────────────────
 
 def get_llm() -> ChatOpenAI:
-    """Standard LLM for response generation."""
     return ChatOpenAI(
         model=settings.openai_model,
         api_key=settings.openai_api_key,
         temperature=0.2,
-    )
-
-
-def get_fast_llm() -> ChatOpenAI:
-    """Fast LLM for intent classification — lower max_tokens for speed."""
-    return ChatOpenAI(
-        model=settings.openai_model,
-        api_key=settings.openai_api_key,
-        temperature=0,
-        max_tokens=30,  # Intent is just 1-3 words, no need for 4096 tokens
-    )
-
-
-def get_streaming_llm() -> ChatOpenAI:
-    """LLM with streaming enabled for SSE responses."""
-    return ChatOpenAI(
-        model=settings.openai_model,
-        api_key=settings.openai_api_key,
-        temperature=0.2,
-        streaming=True,
     )
 
 
@@ -85,7 +59,7 @@ def get_streaming_llm() -> ChatOpenAI:
 
 async def understand_intent(state: AgentState) -> AgentState:
     """Classify the user's intent(s) — supports multi-intent detection."""
-    llm = get_fast_llm()  # Use fast LLM (max_tokens=30) — intent is just 1-3 words
+    llm = get_llm()
 
     prompt = f"""You are an intent classifier for an HR Support chatbot.
 
@@ -352,15 +326,28 @@ async def handle_data_query(state: AgentState) -> AgentState:
                     state["actions"] = []
                     return state
 
-        # Fetch child table records — always fetch ALL child tables
-        # Child tables are typically small (< 50 rows), so fetching all is fine.
-        # Selective filtering was causing issues (e.g., "holiday" not matching "HOLIDAYS")
+        # Fetch child table records — SELECTIVE: only tables relevant to the query
         child_tables_data = {}
         if validated_schema.child_tables:
+            user_q_lower = state["current_input"].lower()
             all_child_names = list(validated_schema.child_tables.keys())
             
-            print(f"[{state['company_id']}][AGENT DATA QUERY] Fetching ALL {len(all_child_names)} child tables: {all_child_names}")
-            for child_table_name in all_child_names:
+            # Filter: only fetch tables whose name matches keywords in the query
+            relevant_tables = []
+            for tname in all_child_names:
+                tname_lower = tname.lower().replace("_", " ").replace("-", " ")
+                tname_words = tname_lower.split()
+                # Include if any word from the table name appears in the query
+                if any(w in user_q_lower for w in tname_words if len(w) > 2):
+                    relevant_tables.append(tname)
+            
+            # If no specific match, include all (user asked generic question like "my details")
+            generic_keywords = ["detail", "data", "information", "record", "profile", "everything", "all", "sab", "sabhi", "mera", "meri"]
+            if not relevant_tables or any(kw in user_q_lower for kw in generic_keywords):
+                relevant_tables = all_child_names
+            
+            print(f"[{state['company_id']}][AGENT DATA QUERY] Fetching {len(relevant_tables)}/{len(all_child_names)} child tables: {relevant_tables}")
+            for child_table_name in relevant_tables:
                 try:
                     all_child_recs = await adapter.get_all_records(table_name=child_table_name)
                     # Filter for records belonging to this employee
@@ -852,70 +839,3 @@ async def chat_with_agent(
         "approval_request_type": result.get("approval_request_type"),
         "request_details": result.get("request_details"),
     }
-
-
-async def chat_with_agent_stream(
-    company_id: str,
-    employee_id: str,
-    employee_name: str,
-    role: str,
-    schema_map: Dict[str, Any],
-    db_config: Dict[str, Any],
-    db_type: str,
-    user_message: str,
-    employee_data: Dict[str, Any],
-    chat_history: List[Dict[str, str]],
-    employee_requests: List[Dict[str, Any]] = None,
-) -> AsyncIterator[str]:
-    """
-    Streaming version: runs the agent graph normally, then streams the final
-    response token-by-token.
-    
-    Yields special markers:
-    - "__HEARTBEAT__" — keep-alive while agent is processing
-    - Regular text chunks — the actual response
-    """
-    import asyncio
-
-    initial_state: AgentState = {
-        "company_id": company_id,
-        "employee_id": employee_id,
-        "employee_name": employee_name,
-        "role": role,
-        "schema_map": schema_map or {},
-        "db_config": db_config or {},
-        "db_type": db_type or "google_sheets",
-        "messages": chat_history,
-        "current_input": user_message,
-        "intent": "",
-        "all_intents": [],
-        "response": "",
-        "actions": [],
-        "employee_data": employee_data or {},
-        "query_result": None,
-        "policy_answer": None,
-        "approval_needed": False,
-        "approval_request_type": None,
-        "request_details": None,
-        "sheet_sync_result": None,
-        "employee_requests": employee_requests or [],
-    }
-
-    # Run the full agent graph with heartbeat keep-alives
-    # This prevents the browser from closing the SSE connection during long processing
-    agent_task = asyncio.create_task(agent_graph.ainvoke(initial_state))
-
-    # Send heartbeats every 1 second while the agent is processing
-    while not agent_task.done():
-        yield "__HEARTBEAT__"
-        await asyncio.sleep(1.0)
-
-    result = agent_task.result()
-    response_text = result.get("response", "I'm sorry, I wasn't able to process that.")
-
-    # Stream the response in small chunks for smooth rendering
-    chunk_size = 12  # characters per chunk
-    for i in range(0, len(response_text), chunk_size):
-        chunk = response_text[i:i + chunk_size]
-        yield chunk
-        await asyncio.sleep(0.003)

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.schemas import LoginRequest, LoginResponse
 from app.services.company_service import get_company
-from app.adapters.adapter_factory import get_adapter, prefetch_employee_data
+from app.adapters.adapter_factory import get_adapter
 from app.utils.auth import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -214,20 +214,6 @@ Respond ONLY with one word: hr, manager, admin, ceo, or employee.
     from app.models.models import UserRole
     # Map the determined role string to the enum to return
     resolved_enum_role = UserRole(determined_role) if determined_role in [e.value for e in UserRole] else UserRole.EMPLOYEE
-
-    # Fire-and-forget: prefetch employee data in background so first chat is instant
-    import asyncio
-    asyncio.create_task(
-        prefetch_employee_data(
-            db_type=db_conn.db_type,
-            connection_config=db_conn.connection_config,
-            company_id=company_id,
-            employee_id=normalized_emp_id,
-            primary_key=primary_key,
-            master_table=schema.get("master_table"),
-        )
-    )
-    print(f"[{company_id}][AUTH LOG] 🚀 Background prefetch triggered for '{normalized_emp_id}'")
 
     return LoginResponse(
         access_token=access_token,

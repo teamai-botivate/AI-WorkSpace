@@ -3,14 +3,11 @@ Botivate HR Support - Adapter Factory
 Dynamically returns the correct database adapter based on the database type.
 New adapters can be plugged in here without modifying any other code.
 
-OPTIMIZED:
-- Connection caching — reuses OAuth-authenticated adapters for 45 min.
-- Employee data caching — caches employee records for 2 min (data freshness with speed).
-- Prefetch support — warm the cache at login time.
+OPTIMIZED: Connection caching — reuses OAuth-authenticated adapters for 45 min.
+Data is still fetched fresh every time, only the CONNECTION is cached.
 """
 
 import time
-import asyncio
 from typing import Dict, Any, Optional, Tuple
 from app.adapters.base_adapter import BaseDatabaseAdapter
 from app.adapters.google_sheets_adapter import GoogleSheetsAdapter
@@ -31,13 +28,6 @@ ADAPTER_REGISTRY: Dict[DatabaseType, type] = {
 # TTL: 45 minutes (OAuth tokens typically valid for 1 hour)
 _adapter_cache: Dict[str, Tuple[BaseDatabaseAdapter, float]] = {}
 _CACHE_TTL_SECONDS = 45 * 60  # 45 minutes
-
-
-# ── Employee Data Cache ───────────────────────────────────
-# Key: "company_id:employee_id" → (record_dict, timestamp)
-# TTL: 2 minutes — employee data doesn't change every second
-_employee_data_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
-_DATA_CACHE_TTL_SECONDS = 120  # 2 minutes
 
 
 def _make_cache_key(db_type: DatabaseType, connection_config: Dict[str, Any]) -> str:
@@ -90,70 +80,6 @@ def invalidate_adapter_cache(db_type: DatabaseType = None, connection_config: Di
     else:
         _adapter_cache.clear()
     print(f"[ADAPTER CACHE] 🗑️ Cache invalidated.")
-
-
-# ── Employee Data Cache Functions ─────────────────────────
-
-def get_cached_employee_data(company_id: str, employee_id: str) -> Optional[Dict[str, Any]]:
-    """Get employee record from cache if fresh (< 2 min old)."""
-    cache_key = f"{company_id}:{employee_id}"
-    if cache_key in _employee_data_cache:
-        record, ts = _employee_data_cache[cache_key]
-        age = time.time() - ts
-        if age < _DATA_CACHE_TTL_SECONDS:
-            print(f"[DATA CACHE] ♻️ Using cached employee data for '{employee_id}' (age: {int(age)}s)")
-            return record
-        else:
-            del _employee_data_cache[cache_key]
-    return None
-
-
-def set_cached_employee_data(company_id: str, employee_id: str, record: Dict[str, Any]):
-    """Store employee record in cache."""
-    cache_key = f"{company_id}:{employee_id}"
-    _employee_data_cache[cache_key] = (record, time.time())
-    print(f"[DATA CACHE] 💾 Cached employee data for '{employee_id}'")
-
-
-def invalidate_employee_data_cache(company_id: str = None, employee_id: str = None):
-    """Clear employee data cache. Call after data updates."""
-    if company_id and employee_id:
-        cache_key = f"{company_id}:{employee_id}"
-        _employee_data_cache.pop(cache_key, None)
-    else:
-        _employee_data_cache.clear()
-    print(f"[DATA CACHE] 🗑️ Employee data cache invalidated.")
-
-
-async def prefetch_employee_data(
-    db_type: DatabaseType,
-    connection_config: Dict[str, Any],
-    company_id: str,
-    employee_id: str,
-    primary_key: str,
-    master_table: Optional[str] = None,
-):
-    """
-    Background prefetch: warm the adapter + data caches at login time.
-    Called as a fire-and-forget task so login response is NOT delayed.
-    """
-    try:
-        # Warm adapter cache
-        adapter = await get_cached_adapter(db_type, connection_config)
-        # Warm employee data cache
-        record = await adapter.get_record_by_key(primary_key, employee_id, table_name=master_table)
-        if record:
-            set_cached_employee_data(company_id, employee_id, record)
-        else:
-            # Case-insensitive fallback
-            all_records = await adapter.get_all_records(table_name=master_table)
-            for rec in all_records:
-                if str(rec.get(primary_key, "")).strip().lower() == employee_id.strip().lower():
-                    set_cached_employee_data(company_id, employee_id, rec)
-                    break
-        print(f"[PREFETCH] ✅ Background prefetch complete for '{employee_id}'")
-    except Exception as e:
-        print(f"[PREFETCH] ⚠️ Background prefetch failed (non-fatal): {e}")
 
 
 async def get_adapter(
