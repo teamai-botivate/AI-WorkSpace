@@ -140,6 +140,13 @@ export default function DashboardPage() {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     console.log(`[FRONTEND LOG] 👉 Sending Chat Message (SSE Stream): "${userMessage}"`);
 
+    // Build conversation history for context (last 10 messages)
+    const currentMessages = [...messages, newMsg];
+    const chatHistory = currentMessages.slice(-10).map(m => ({
+      role: m.type === 'human' ? 'human' : 'ai',
+      content: m.text
+    }));
+
     try {
       // Use SSE streaming for real-time token-by-token response
       const response = await fetch(`${apiUrl}/api/chat/stream`, {
@@ -148,7 +155,7 @@ export default function DashboardPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ message: userMessage })
+        body: JSON.stringify({ message: userMessage, history: chatHistory })
       });
 
       if (!response.ok) {
@@ -159,22 +166,14 @@ export default function DashboardPage() {
       const decoder = new TextDecoder();
       let fullText = '';
 
-      // Create a placeholder AI message that we'll update with streaming tokens
       const aiMsgId = Date.now() + 1;
-      setMessages(prev => [...prev, {
-        id: aiMsgId,
-        type: 'ai',
-        text: '',
-        timestamp: new Date().toISOString()
-      }]);
-      setIsTyping(false); // Hide "Thinking..." since we're showing real text
+      let aiMessageAdded = false;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        // Parse SSE data lines
         const lines = chunk.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -182,10 +181,21 @@ export default function DashboardPage() {
               const data = JSON.parse(line.slice(6));
               if (data.token) {
                 fullText += data.token;
-                // Update the AI message in-place with accumulated text
-                setMessages(prev => prev.map(msg => 
-                  msg.id === aiMsgId ? { ...msg, text: fullText } : msg
-                ));
+                
+                if (!aiMessageAdded) {
+                  setIsTyping(false);
+                  setMessages(prev => [...prev, {
+                    id: aiMsgId,
+                    type: 'ai',
+                    text: fullText,
+                    timestamp: new Date().toISOString()
+                  }]);
+                  aiMessageAdded = true;
+                } else {
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMsgId ? { ...msg, text: fullText } : msg
+                  ));
+                }
               } else if (data.done) {
                 fullText = data.reply || fullText;
                 setMessages(prev => prev.map(msg => 
@@ -205,7 +215,6 @@ export default function DashboardPage() {
 
     } catch (error) {
       console.error("[FRONTEND ERROR] ❌ Chat Stream Failed:", error);
-      setIsTyping(false);
 
       // Remove the empty placeholder AI message (from failed stream)
       setMessages(prev => prev.filter(msg => !(msg.type === 'ai' && msg.text === '')));
@@ -214,9 +223,11 @@ export default function DashboardPage() {
       try {
         console.log("[FRONTEND LOG] 🔄 Falling back to non-streaming endpoint...");
         const fallbackResponse = await axios.post(`${apiUrl}/api/chat/send`, 
-          { message: userMessage },
+          { message: userMessage, history: chatHistory },
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        
+        setIsTyping(false);
         setMessages(prev => [
           ...prev,
           {
@@ -228,6 +239,7 @@ export default function DashboardPage() {
         ]);
       } catch (fallbackError) {
         console.error("[FRONTEND ERROR] ❌ Fallback also failed:", fallbackError);
+        setIsTyping(false);
         setMessages(prev => [
           ...prev,
           {

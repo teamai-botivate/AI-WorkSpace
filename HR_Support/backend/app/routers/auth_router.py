@@ -104,8 +104,46 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     # Step 5: Get employee name and dynamically determine role
     print(f"[{company_id}][AUTH LOG] Step 5: Determining employee role based on schema & data...")
+    
+    # DYNAMIC NAME RESOLUTION — works with ANY schema
+    employee_name = ""
+    
+    # Strategy 1: Use schema_map's mapped column
     name_col = schema.get("employee_name", "")
-    employee_name = str(employee.get(name_col, "Employee")).strip()
+    if name_col and name_col in employee:
+        employee_name = str(employee.get(name_col, "")).strip()
+    
+    # Strategy 2: If mapped column gave empty/missing, try First Name + Last Name concatenation
+    if not employee_name or employee_name in ("", "Employee", "None"):
+        first_name = ""
+        last_name = ""
+        for col_key, col_val in employee.items():
+            k_lower = str(col_key).lower().strip()
+            val = str(col_val).strip()
+            if not val or val.lower() in ("", "none", "nan"):
+                continue
+            if k_lower in ("first name", "first_name", "firstname", "fname", "given name"):
+                first_name = val
+            elif k_lower in ("last name", "last_name", "lastname", "lname", "surname", "family name"):
+                last_name = val
+        if first_name or last_name:
+            employee_name = f"{first_name} {last_name}".strip()
+    
+    # Strategy 3: Fuzzy search — find any column containing "name" (but not "username", "company name")
+    if not employee_name or employee_name in ("", "Employee", "None"):
+        exclude_keywords = ["user", "company", "file", "sheet", "column", "table", "manager", "report"]
+        for col_key, col_val in employee.items():
+            k_lower = str(col_key).lower().strip()
+            val = str(col_val).strip()
+            if "name" in k_lower and not any(ex in k_lower for ex in exclude_keywords):
+                if val and val.lower() not in ("", "none", "nan"):
+                    employee_name = val
+                    break
+    
+    # Final fallback
+    if not employee_name or employee_name in ("", "None"):
+        employee_name = employee_id  # At least show the ID
+    
     print(f"[{company_id}][AUTH LOG] Employee Name resolved as: '{employee_name}'")
 
     determined_role = "employee"

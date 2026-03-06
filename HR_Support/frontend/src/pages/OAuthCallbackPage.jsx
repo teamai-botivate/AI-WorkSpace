@@ -53,12 +53,22 @@ export default function OAuthCallbackPage() {
 
                 // Return to Onboarding Step 2
                 localStorage.setItem('botivate_google_connected', 'true');
-                navigate('/onboarding');
+                
+                // If opened as a popup, close it. Otherwise navigate normally.
+                if (window.opener) {
+                    window.close();
+                } else {
+                    navigate('/onboarding');
+                }
 
             } catch (err) {
                 console.error("OAuth Exchange Error:", err);
                 toast.error(err.response?.data?.detail || "Failed to establish secure connection.", { id: 'oauth' });
-                navigate('/onboarding');
+                if (window.opener) {
+                    window.close();
+                } else {
+                    navigate('/onboarding');
+                }
             }
         };
 

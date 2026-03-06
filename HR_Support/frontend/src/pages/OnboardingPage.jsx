@@ -85,11 +85,25 @@ export default function OnboardingPage() {
     const redirect = `${window.location.origin}/oauth/callback`; // Auto-detect current host (localhost or Production)
 
     // Temporarily save exact current form fields so we don't lose dbUrl/texts typed
-    localStorage.setItem('botivate_onboarding_form', JSON.stringify(formData));
-
     const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirect}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
 
-    window.location.href = oauthUrl;
+    // Open popup
+    const popup = window.open(oauthUrl, "GoogleAuth", "width=500,height=600");
+
+    // Poll to detect when popup closes or auth completes
+    const checkAuth = setInterval(() => {
+      if (localStorage.getItem('botivate_google_connected') === 'true') {
+        clearInterval(checkAuth);
+        setGoogleConnected(true);
+        // Wait a small bit in case the popup hasn't closed yet
+      }
+      if (popup && popup.closed) {
+        clearInterval(checkAuth);
+        if (localStorage.getItem('botivate_google_connected') === 'true') {
+           setGoogleConnected(true);
+        }
+      }
+    }, 1000);
   };
 
   const handleSubmit = async (e) => {

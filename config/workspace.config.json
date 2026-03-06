@@ -25,7 +25,7 @@
       "features": ["JD Generator", "Resume Screening", "Aptitude Tests", "Email Automation"],
       "backend": {
         "port": 8000,
-        "healthCheck": "/docs",
+        "healthCheck": "/health",
         "startCommand": "uvicorn app.unified_server:app --port 8000 --reload",
         "workDir": "Resume-Screening-Agent/Backend",
         "envFile": "Resume-Screening-Agent/.env",

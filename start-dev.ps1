@@ -95,8 +95,8 @@ foreach ($agent in $Config.agents) {
                 $startScript = "Set-Location '$backendDir'; $backendCmd"
             }
 
-            Start-Process powershell -ArgumentList "-NoExit", "-Command", $startScript -WindowStyle Minimized
-            Write-Host "   [OK] Backend  -> port $($agent.backend.port)" -ForegroundColor Green
+            Start-Process powershell -ArgumentList "-Command", $startScript -NoNewWindow
+            Write-Host "   [OK] Backend  -> port $($agent.backend.port) (Background)" -ForegroundColor Green
         } else {
             Write-Host "   [WARN] Backend dir not found: $backendDir" -ForegroundColor DarkYellow
         }
@@ -119,8 +119,8 @@ foreach ($agent in $Config.agents) {
         }
 
         $frontendScript = "Set-Location '$frontendDir'; $envSetup$frontendCmd"
-        Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendScript -WindowStyle Minimized
-        Write-Host "   [OK] Frontend -> port $($agent.frontend.port) ($($agent.frontend.url))" -ForegroundColor Green
+        Start-Process powershell -ArgumentList "-Command", $frontendScript -NoNewWindow
+        Write-Host "   [OK] Frontend -> port $($agent.frontend.port) (Background)" -ForegroundColor Green
     } else {
         Write-Host "   [WARN] Frontend dir not found: $frontendDir" -ForegroundColor DarkYellow
     }
@@ -140,8 +140,8 @@ if (Test-Path $gatewayDir) {
     } else {
         $gatewayScript = "Set-Location '$gatewayDir'; uvicorn app.main:app --port $GatewayPort --reload"
     }
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", $gatewayScript -WindowStyle Minimized
-    Write-Host "   [OK] Gateway  -> port $GatewayPort (http://localhost:$GatewayPort/docs)" -ForegroundColor Green
+    Start-Process powershell -ArgumentList "-Command", $gatewayScript -NoNewWindow
+    Write-Host "   [OK] Gateway  -> port $GatewayPort (Background)" -ForegroundColor Green
 } else {
     Write-Host "   [WARN] Gateway dir not found" -ForegroundColor DarkYellow
 }

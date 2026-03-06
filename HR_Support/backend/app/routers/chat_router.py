@@ -1,9 +1,7 @@
-"""
-Botivate HR Support - Chat API Router
-Connects the frontend chatbot to the LangGraph agent.
-"""
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+import json
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -16,6 +14,113 @@ from app.services.company_service import get_company
 from app.services.approval_service import create_approval_request
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
+
+
+@router.post("/stream")
+async def stream_chat(
+    data: ChatMessage,
+    user: TokenPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Stream a chat response token-by-token.
+    """
+    async def event_generator():
+        # This is a simplified version that gets the full response and streams it
+        # Real streaming would require refactoring the agent graph to yield tokens
+        
+        # 1. First, send a "thinking" token if needed (frontend already shows thinking animation)
+        # 2. Get the full result (same logic as /send)
+        try:
+            # Re-using the same logic as /send but wrapped in a generator
+            company = await get_company(db, user.company_id)
+            if not company:
+                yield f"data: {json.dumps({'error': 'Company not found'})}\n\n"
+                return
+
+            result = await db.execute(
+                select(DatabaseConnection).where(
+                    DatabaseConnection.company_id == user.company_id,
+                    DatabaseConnection.is_active == True,
+                )
+            )
+            db_conn = result.scalars().first()
+            if not db_conn:
+                yield f"data: {json.dumps({'error': 'Database not configured'})}\n\n"
+                return
+
+            schema_map = db_conn.schema_map
+            primary_key_col = schema_map.get("primary_key", "")
+            adapter = await get_adapter(db_conn.db_type, db_conn.connection_config)
+            master_table = schema_map.get("master_table", None)
+            
+            employee_record = await adapter.get_record_by_key(primary_key_col, user.employee_id, table_name=master_table)
+            if not employee_record:
+                # Fallback matching
+                all_records = await adapter.get_all_records(table_name=master_table)
+                for rec in all_records:
+                    if str(rec.get(primary_key_col, "")).strip().lower() == user.employee_id.strip().lower():
+                        employee_record = rec
+                        break
+            
+            from app.services.approval_service import get_employee_requests
+            recent_requests_orm = await get_employee_requests(db, user.company_id, user.employee_id)
+            recent_requests = [
+                {
+                    "id": r.id,
+                    "request_type": r.request_type,
+                    "status": r.status.value,
+                    "context": r.context,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                } for r in recent_requests_orm
+            ]
+
+            agent_result = await chat_with_agent(
+                company_id=user.company_id,
+                employee_id=user.employee_id,
+                employee_name=user.employee_name,
+                role=user.role.value if isinstance(user.role, UserRole) else user.role,
+                schema_map=schema_map,
+                db_config=db_conn.connection_config,
+                db_type=db_conn.db_type.value,
+                user_message=data.message,
+                employee_data=employee_record or {},
+                chat_history=data.history or [],
+                employee_requests=recent_requests,
+            )
+
+            # Create approval if needed (background)
+            if agent_result.get("approval_needed"):
+                intent = agent_result.get("approval_request_type") or agent_result.get("intent", "general")
+                await create_approval_request(
+                    db=db,
+                    company_id=user.company_id,
+                    data=ApprovalRequestCreate(
+                        employee_id=user.employee_id,
+                        employee_name=user.employee_name,
+                        request_type=intent,
+                        request_details=agent_result.get("request_details") or {},
+                        context=data.message,
+                        priority=RequestPriority.NORMAL,
+                        assigned_to_role=UserRole.MANAGER,
+                    ),
+                )
+
+            # Stream the reply in small chunks to simulate real-time typing
+            full_reply = agent_result.get("reply", "")
+            words = full_reply.split(' ')
+            for i, word in enumerate(words):
+                token = word + (' ' if i < len(words) - 1 else '')
+                yield f"data: {json.dumps({'token': token})}\n\n"
+                await asyncio.sleep(0.02) # Small delay for smooth streaming
+            
+            yield f"data: {json.dumps({'done': True, 'reply': full_reply})}\n\n"
+
+        except Exception as e:
+            print(f"[STREAM ERROR] {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.post("/send", response_model=ChatResponse)
@@ -171,7 +276,7 @@ async def send_message(
             db_type=db_conn.db_type.value if db_conn else "google_sheets",
             user_message=data.message,
             employee_data=employee_record,
-            chat_history=[],
+            chat_history=data.history or [],
             employee_requests=recent_requests,
         )
         print(f"[{company_id}][CHAT LOG] ✅ Agent processing completed successfully. Returning ChatResponse.")

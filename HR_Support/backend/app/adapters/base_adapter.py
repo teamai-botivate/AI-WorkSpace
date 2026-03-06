@@ -66,6 +66,11 @@ class BaseDatabaseAdapter(ABC):
         pass
 
     @abstractmethod
+    async def update_record_by_filters(self, filters: Dict[str, Any], updates: Dict[str, Any], table_name: Optional[str] = None) -> bool:
+        """Update a single record matching ALL filter conditions. Essential for child tables with duplicate keys."""
+        pass
+
+    @abstractmethod
     async def create_record(self, data: Dict[str, Any], table_name: Optional[str] = None) -> bool:
         """Create a new record in the data source."""
         pass

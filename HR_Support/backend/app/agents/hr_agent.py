@@ -38,11 +38,12 @@ class AgentState(TypedDict):
     employee_data: Dict[str, Any]      # Full employee record
     query_result: Optional[str]        # DB query result
     policy_answer: Optional[str]       # RAG search result
+    company_policies: Optional[str]    # Pre-fetched policies text (cached once)
     approval_needed: bool              # Whether approval workflow was triggered
-    approval_request_type: Optional[str]       # Explicitly track request type (to avoid using 'greeting')
+    approval_request_type: Optional[str]       # Explicitly track request type
     employee_requests: Optional[List[Dict[str, Any]]] # Real DB requests for status check
-    request_details: Optional[Dict[str, Any]]  # Extracted request details (dates, reason, etc.)
-    sheet_sync_result: Optional[Dict[str, Any]]  # Result of Google Sheet sync operation
+    request_details: Optional[Dict[str, Any]]  # Extracted request details
+    sheet_sync_result: Optional[Dict[str, Any]]  # Result of Google Sheet sync
 
 
 # ── LLM Instance ─────────────────────────────────────────
@@ -55,37 +56,93 @@ def get_llm() -> ChatOpenAI:
     )
 
 
+async def _get_policies_text(state: dict) -> str:
+    """Return pre-cached policies from state, or fetch once if missing."""
+    if state.get("company_policies"):
+        return state["company_policies"]
+    
+    # Fallback: fetch and cache
+    try:
+        from app.database import async_session_factory
+        from app.services.company_service import get_policies
+        async with async_session_factory() as db_session:
+            policies = await get_policies(db_session, state["company_id"])
+            if policies:
+                text = "\n".join([f"- {p.title}: {(p.content or p.description or '')[:500]}" for p in policies])
+                state["company_policies"] = text
+                return text
+    except Exception as e:
+        print(f"[POLICIES] Fetch failed: {e}")
+    return "No policies available."
+
+
 # ── Node 1: Intent Understanding ─────────────────────────
 
 async def understand_intent(state: AgentState) -> AgentState:
     """Classify the user's intent(s) — supports multi-intent detection."""
+    # Build conversation context from history
     llm = get_llm()
+    history_text = ""
+    if state.get("messages"):
+        recent = state["messages"][-8:]  # Last 8 messages for context
+        history_lines = []
+        for msg in recent:
+            role = msg.get("role", "human")
+            content = msg.get("content", "")
+            if content:
+                history_lines.append(f"{'Employee' if role == 'human' else 'AI'}: {content}")
+        if history_lines:
+            history_text = "\n".join(history_lines)
 
     prompt = f"""You are an intent classifier for an HR Support chatbot.
 
 Employee: {state['employee_name']} (ID: {state['employee_id']}, Role: {state['role']})
 
-The user said: "{state['current_input']}"
+{"CONVERSATION HISTORY (for context):" + chr(10) + history_text + chr(10) if history_text else ""}
+The user's LATEST message: "{state['current_input']}"
 
-Classify ALL intents present in this message. A single message can have MULTIPLE intents.
+Classify the intent of the LATEST message. Use conversation history to understand context.
+
+CRITICAL RULES:
+1. Distinguish between "Asking ABOUT a process" (Inquiry) and "Asking TO DO an action" (Request).
+   - "How do I resign?" → "policy_query"
+   - "I want to resign" → "resignation"
+2. If the user says "ok", "yes", "do it", "kar do", "haan", "submit it", "proceed" — look at the CONVERSATION HISTORY to understand what they are confirming/requesting.
+   - If the previous conversation was about leave → classify as "leave_request"
+   - If the previous conversation was about resignation → classify as "resignation"
+   - If the previous conversation was about a grievance → classify as "grievance"
+   - If no clear prior context → classify as "general"
+
 Available intent categories:
 - "greeting" — Hello, hi, good morning, etc.
-- "policy_query" — Questions about company rules, policies, leave policy, etc.
-- "data_query" — Checking leave balance, salary info, personal details, holidays, team size, etc.
+- "policy_query" — Questions about company rules, policies, leave policy, "How to do X?", "What is the process for Y?"
+- "data_query" — Checking leave balance, salary info, personal details, holidays, team size, leave eligibility, "can I get X days leave?", "kitni leave bachi hai?", "Am I eligible for X?", how many leaves remaining, etc.
 - "data_update" — HR/Admin wants to UPDATE employee data (change designation, update salary, modify details)
-- "leave_request" — Applying for leave, requesting time off
-- "resignation" — Submitting resignation
+- "leave_request" — Actually applying for leave, "Take off for 3 days", "Submit my leave", OR confirming a previously discussed leave.
+- "resignation" — Actually submitting resignation, OR confirming a previously discussed resignation.
 - "grievance" — Filing a complaint or grievance
 - "approval_action" — Manager/HR approving or rejecting a request
 - "status_check" — Checking status of a previous request
+- "predictive_analytics" — Asking for predictions like "When will my salary increase?", "When is my next promotion?", salary hike probability, etc.
 - "support" — Password reset, login issues, account problems
 - "general" — Everything else
 
 If the message contains multiple intents, return them comma-separated.
 Examples:
 - "hi, show me my leave balance" → "greeting,data_query"
+- "how do i resign?" → "policy_query"
+- "i want to resign today" → "resignation"
+- "ok do" (after leave discussion) → "leave_request"
 - "tell me my details and company policy" → "data_query,policy_query"
-- "I want to apply for leave" → "leave_request"
+- "mujhe 4 din ka leave mil sakta hai kya?" → "data_query"
+- "kitni leave bachi hai?" → "data_query"
+- "leave policy kya hai?" → "policy_query"
+- "mera salary slip dikhao" → "data_query"
+- "leave de do 2 din ka" → "leave_request"
+- "mujhe leave chahiye" → "leave_request"
+- "chutti chahiye" → "leave_request"
+- "leave apply karna hai" → "leave_request"
+- "mujhe leave do" → "leave_request"
 
 Return ONLY the intent string(s), nothing else.
 """
@@ -100,6 +157,7 @@ Return ONLY the intent string(s), nothing else.
     # Priority list of intents (highest priority first)
     PRIORITY_ORDER = [
         "data_update",
+        "predictive_analytics",
         "leave_request",
         "resignation",
         "grievance",
@@ -121,15 +179,16 @@ Return ONLY the intent string(s), nothing else.
         
     primary_intent = valid_intents[0]
     
-    # Filter out noisy secondary intents to prevent overlapping responses
+    # Filter out truly noisy secondary intents (only greeting/general are noise)
     final_intents = [primary_intent]
     for intent in valid_intents[1:]:
+        # Skip noise intents
         if intent in {"greeting", "general"}:
             continue
-        if primary_intent == "status_check" and intent == "data_query":
+        # Skip true duplicates (same handler)
+        if intent == primary_intent:
             continue
-        if primary_intent in {"data_update", "leave_request", "resignation"} and intent == "data_query":
-            continue
+        # Keep everything else — let the user get combined responses
         final_intents.append(intent)
 
     print(f"[{state['company_id']}][AGENT INTENT] Primary Intent: '{primary_intent}', All Intents: {final_intents}")
@@ -225,20 +284,20 @@ async def handle_policy_query(state: AgentState) -> AgentState:
                             print(f"[{state['company_id']}][AGENT POLICY] Formatting DB fallback with LLM...")
                             llm = get_llm()
                             full_context = "\n\n---\n\n".join(policy_texts)
-                            fmt_prompt = f"""You are an HR assistant. Answer the employee's question using ONLY the company policies provided below.
+                            fmt_prompt = f"""You are an HR assistant. Answer the employee's question using ONLY the provided company policies.
 
-Company Policies:
+CRITICAL RULES:
+- Answer ONLY from the data provided below.
+- If the specific answer is NOT in the policies, say "I could not find the specific process for this in your company's policies."
+- NEVER provide "general guidelines", "common practices", or any info NOT in the text below.
+- If you can't find the answer, DO NOT try to be helpful by guessing. Just state that the information is missing from the provided policy.
+
+Company Policies Context:
 {full_context}
 
-Employee Question: {state['current_input']}
+Question: {state['current_input']}
 
-Answer precisely from the policies. If the specific answer isn't in the policies, summarize what policies are available.
-
-FORMATTING RULES:
-- Use clear SECTION HEADERS (###).
-- Use BULLETED LISTS for readability.
-- DO NOT just dump a single paragraph.
-- Use DOUBLE NEWLINES between sections.
+Answer precisely based on the policy text above.
 """
                             resp = await llm.ainvoke([HumanMessage(content=fmt_prompt)])
                             answer = resp.content.strip()
@@ -373,7 +432,10 @@ async def handle_data_query(state: AgentState) -> AgentState:
                 records = await adapter.get_all_records(table_name=master_table)
                 extra_context = f"\n\nAdditional team data (you have {role} access. Total employees: {len(records)}):\n{json.dumps(records[:50], indent=2, default=str)}"
 
-        # Step 4: Ask LLM to answer from verified data
+        # Step 4a: Use pre-cached policies
+        policy_context = await _get_policies_text(state)
+
+        # Step 4b: Ask LLM to answer from verified data + policies
         llm = get_llm()
         print(f"[{state['company_id']}][AGENT DATA QUERY] Context prepared. Sending context to AI (Length: {len(data_context) + len(extra_context)} chars).")
         
@@ -386,19 +448,21 @@ Logged-in Employee's Data:
 {data_context}
 {extra_context}
 
+Company Policies & Rules (use these to provide informed answers):
+{policy_context}
+
 Question: {state['current_input']}
 
 Rules:
-- Answer ONLY from the data provided.
+- Answer using BOTH the employee's data AND any relevant company policies.
 - When asked about "my" details, ONLY use the logged-in employee's data above.
-- If the data does not contain the answer, say "I don't have this information in the database."
-- Be professional. 
-- FORMATTING RULES: 
-  - Use clear SECTION HEADERS (e.g. ### Leave Summary).
-  - Use BULLETED LISTS for multiple fields.
-  - DO NOT just dump a single paragraph.
-  - Use bold sparingly for keys.
-  - Use DOUBLE NEWLINES between sections for readability.
+- If the data does not contain the answer, check if a company policy covers it.
+- If neither source has the answer, say "I don't have this information in the database or company policies."
+- Be CONCISE — answer in 3-5 sentences max unless listing data.
+- Reference specific policy names when citing rules.
+- FORMATTING: Use bullet points for lists, bold for key numbers/values.
+- Keep tone conversational, not formal letters.
+- NO greetings like "Dear" or sign-offs like "Best regards"
 """
         response = await llm.ainvoke([HumanMessage(content=answer_prompt)])
         state["response"] = response.content.strip()
@@ -429,20 +493,61 @@ async def handle_approval_request(state: AgentState) -> AgentState:
     }
     request_label = request_type_map.get(intent, intent.replace("_", " ").title())
 
-    # Use AI to extract structured details from the user's message
-    extracted_details = {}
-    try:
-        llm = get_llm()
-        extract_prompt = f"""Extract structured details from this employee request message.
+    # Build conversation context for better understanding
+    history_context = ""
+    if state.get("messages"):
+        recent = state["messages"][-6:]
+        lines = [f"{'Employee' if m.get('role') == 'human' else 'AI'}: {m.get('content', '')}" for m in recent if m.get('content')]
+        if lines:
+            history_context = "\nRecent conversation:\n" + "\n".join(lines)
+
+    # Use AI to double check if this is an action or just a query
+    llm = get_llm()
+    verify_prompt = f"""Is the user actually asking to SUBMIT an official request right now, or are they just asking about the process?
+{history_context}
+User's latest message: "{user_message}"
+
+IMPORTANT: If the user says "ok", "do it", "yes", "kar do", "haan", "proceed", "submit", these are CONFIRMATIONS — treat them as "action".
+Return ONLY "action" if they want to submit/apply now (including confirmations).
+Return "inquiry" if they are asking "how to", "steps for", or "process of".
+"""
+    verify_resp = await llm.ainvoke([HumanMessage(content=verify_prompt)])
+    if "inquiry" in verify_resp.content.lower():
+        print(f"[AGENT APPROVAL VERIFY] ⚠️ Detected as inquiry. Redirecting to Policy/General.")
+        # Re-route to policy handler instead
+        from app.services.rag_service import answer_from_policies
+        policy_resp = await answer_from_policies(state["company_id"], user_message)
+        if policy_resp and not policy_resp.startswith("I'm sorry"):
+            state["response"] = policy_resp
+        else:
+            state["response"] = (
+                f"To submit a {request_label}, you'll need to provide some basic details like dates or reason. "
+                f"If you'd like me to start the process for you now, just say 'I want to apply for {request_label.lower()}'."
+            )
+        state["actions"] = []
+        return state
+
+    # ─── PHASE CHECK: Is this a CONFIRMATION of a previously warned request? ───
+    already_warned = False
+    if state.get("messages"):
+        for msg in reversed(state["messages"][-4:]):
+            content = msg.get("content", "").lower()
+            if "kya aap fir bhi" in content or "do you still want" in content or "submit karna chahte" in content:
+                already_warned = True
+                break
+    
+    # ─── Extract details from message + history ───
+    extract_prompt = f"""Extract structured details from this employee request. Use BOTH the current message AND the conversation history to find all relevant details.
+{history_context}
 
 Employee: {name}
 Request type: {request_label}
-Message: "{user_message}"
+Current message: "{user_message}"
 
-Extract any of these fields if mentioned:
+Extract any of these fields if mentioned ANYWHERE in the conversation:
 - leave_type (sick, casual, earned, etc.)
 - start_date
-- end_date
+- end_date  
 - duration (number of days — Return ONLY the NUMBER, e.g. 3)
 - reason
 - any other relevant details
@@ -451,36 +556,127 @@ Note: If start_date and end_date are provided but duration is missing, calculate
 Return ONLY valid JSON with the extracted fields. If a field is not mentioned, omit it.
 Example: {{"reason": "family function", "start_date": "2026-02-25", "end_date": "2026-02-27", "duration": 3, "leave_type": "casual"}}
 """
-        resp = await llm.ainvoke([HumanMessage(content=extract_prompt)])
-        import json, re
-        raw = resp.content.strip()
-        clean = re.sub(r"```json|```", "", raw).strip()
+    resp = await llm.ainvoke([HumanMessage(content=extract_prompt)])
+    import json, re
+    raw = resp.content.strip()
+    clean = re.sub(r"```json|```", "", raw).strip()
+    try:
         extracted_details = json.loads(clean)
-    except Exception as e:
-        print(f"[DETAIL EXTRACTION ERROR] {e}")
+    except:
         extracted_details = {"raw_message": user_message}
 
-    # Store extracted details in state for the chat_router to pick up
     state["request_details"] = extracted_details
+    
+    # ─── Analyze employee data + policies BEFORE deciding ───
+    emp_data = state.get("employee_data", {})
+    policy_info = await _get_policies_text(state)
+    
+    # Fetch child table data (Leave_Record etc.) for fuller picture
+    child_data_context = ""
+    try:
+        from app.models.models import DatabaseType
+        from app.models.schemas import ValidatedSchemaMap
+        validated_schema = ValidatedSchemaMap(**state["schema_map"])
+        if validated_schema.child_tables:
+            db_type = DatabaseType(state.get("db_type", "google_sheets"))
+            adapter = await get_adapter(db_type, state["db_config"])
+            for child_name in validated_schema.child_tables.keys():
+                try:
+                    child_recs = await adapter.get_all_records(table_name=child_name)
+                    emp_recs = [r for r in child_recs if state["employee_id"].lower() in [str(v).strip().lower() for v in r.values()]]
+                    if emp_recs:
+                        child_data_context += f"\n{child_name}: {json.dumps(emp_recs[-5:], default=str)}"
+                except:
+                    pass
+    except Exception as e:
+        print(f"[APPROVAL] Child data fetch: {e}")
+    
+    llm2 = get_llm()
+    
+    if already_warned:
+        # ─── PHASE 2: User confirmed after warning → SUBMIT NOW ───
+        print(f"[APPROVAL] User confirmed after warning. Submitting request.")
+        
+        smart_response_prompt = f"""The employee confirmed they want to proceed with their request despite the warning. Generate a SHORT confirmation.
 
-    state["response"] = (
-        f"I understand you want to submit a **{request_label}**, {name}. "
-        f"I have recorded your request and sent it to the appropriate authority for review. "
-        f"You will be notified once a decision is made.\n\n"
-        f"📋 **Request Details:**\n"
-    )
-    for k, v in extracted_details.items():
-        if k != "raw_message":
-            state["response"] += f"• **{k.replace('_', ' ').title()}**: {v}\n"
+Employee: {name}
+Request Type: {request_label}
+Details: {json.dumps(extracted_details, default=str)}
 
-    state["response"] += (
-        f"\n⚠️ Please note: I cannot approve requests myself — all approvals require human authorization."
-    )
-    state["approval_needed"] = True
-    state["approval_request_type"] = intent  # Explicitly store the true action type
-    state["actions"] = [
-        {"type": "info", "text": f"📋 {request_label} submitted for approval"},
-    ]
+Keep it under 3 lines. Confirm submission. Add ⚠️ that human authorization is required."""
+        
+        smart_resp = await llm2.ainvoke([HumanMessage(content=smart_response_prompt)])
+        state["response"] = smart_resp.content.strip()
+        state["approval_needed"] = True
+        state["approval_request_type"] = intent
+        state["actions"] = [{"type": "info", "text": f"📋 {request_label} submitted for approval"}]
+        return state
+    
+    # ─── PHASE 1: Analyze and present findings FIRST ───
+    analysis_prompt = f"""You are a smart HR assistant. The employee wants to submit a {request_label}. 
+BEFORE blindly submitting, analyze their current situation and advise them.
+
+Employee: {name} (ID: {state['employee_id']})
+Request Type: {request_label}
+Request Details: {json.dumps(extracted_details, default=str)}
+
+Employee's Database Record:
+{json.dumps(emp_data, default=str, indent=2) if emp_data else 'No data available'}
+
+Leave/Request History:
+{child_data_context if child_data_context else 'No history available'}
+
+Company Policies:
+{policy_info}
+
+TASK:
+1. Analyze the employee's CURRENT leave balance, leave history, and relevant policy rules
+2. If this is a Leave Request:
+   - Show their current leave status (taken vs remaining)
+   - Show their recent leave history if available
+   - Check if they have sufficient balance for the requested duration
+   - Reference the specific leave policy rules that apply
+3. Based on your analysis:
+   - If ELIGIBLE: Say "Your request looks good" and confirm you're submitting it
+   - If NOT ELIGIBLE or CONCERN (0 balance, exceeded limit, etc.): 
+     * Explain the issue clearly
+     * Show the data that shows the problem
+     * Ask: "Kya aap fir bhi request submit karna chahte hain?" (Do you still want to submit?)
+     * Do NOT submit yet
+
+RULES:
+- Be CONCISE — max 8 lines
+- Use bullet points
+- Bold key numbers
+- NO signatures, NO formal greetings
+- Reference policy by name
+- Show actual numbers from the database
+"""
+    
+    analysis_resp = await llm2.ainvoke([HumanMessage(content=analysis_prompt)])
+    analysis_text = analysis_resp.content.strip()
+    
+    # Check if the AI decided to ask for confirmation (detected a concern)
+    has_concern = any(phrase in analysis_text.lower() for phrase in [
+        "kya aap fir bhi", "do you still want", "submit karna chahte",
+        "insufficient", "exhausted", "0 remaining", "no leaves remaining",
+        "exceeded", "not eligible", "0 leaves"
+    ])
+    
+    if has_concern:
+        # DON'T submit — ask for confirmation first
+        print(f"[APPROVAL] ⚠️ Concern detected. Asking for confirmation.")
+        state["response"] = analysis_text
+        state["approval_needed"] = False  # Don't submit yet!
+        state["actions"] = []
+    else:
+        # ELIGIBLE — submit directly
+        print(f"[APPROVAL] ✅ No concerns. Submitting request directly.")
+        state["response"] = analysis_text + "\n\n⚠️ Please note: All approvals require human authorization."
+        state["approval_needed"] = True
+        state["approval_request_type"] = intent
+        state["actions"] = [{"type": "info", "text": f"📋 {request_label} submitted for approval"}]
+    
     return state
 
 
@@ -519,6 +715,66 @@ async def handle_status_check(state: AgentState) -> AgentState:
         
     state["response"] = response.strip()
     state["actions"] = []
+    return state
+
+
+# ── Node 8: Predictive Analytics ─────────────────────────
+
+async def handle_predictive_analytics(state: AgentState) -> AgentState:
+    """Analyze database patterns and company policies to predict career growth."""
+    print(f"\n[{state['company_id']}][AGENT ANALYTICS] 🧠 Running Predictive Analytics for: {state['employee_name']}")
+    
+    emp_data = state.get("employee_data", {})
+    if not emp_data:
+        state["response"] = "I don't have enough data in your profile to perform a predictive analysis."
+        return state
+
+    # Step 1: Fetch team context (historical data for trend analysis)
+    team_data = []
+    try:
+        from app.models.models import DatabaseType
+        db_type = DatabaseType(state.get("db_type", "google_sheets"))
+        adapter = await get_adapter(db_type, state["db_config"])
+        master_table = state["schema_map"].get("master_table", None)
+        team_data = await adapter.get_all_records(table_name=master_table)
+    except Exception as e:
+        print(f"[ANALYTICS] Failed to fetch team data: {e}")
+
+    # Step 2: Use pre-cached policies
+    policy_context = await _get_policies_text(state)
+
+    llm = get_llm()
+    
+    prompt = f"""You are an expert HR Analyst. Provide a clear, simple, and PREDICTIVE response to the employee's growth question.
+
+CONTEXT 1: LOGGED-IN EMPLOYEE PROFILE
+{json.dumps(emp_data, indent=2, default=str)}
+
+CONTEXT 2: COMPANY POLICIES
+{policy_context}
+
+CONTEXT 3: ANONYMIZED TEAM TRENDS
+{json.dumps(team_data[:30], indent=2, default=str)}
+
+USER QUESTION: "{state['current_input']}"
+
+INSTRUCTIONS:
+1. ANALYZE: Use the employee's joining date, performance, and current role. Check "Company Policies" for timelines/rules.
+2. TREND MATCH: Look at "Team Trends" for common growth patterns.
+3. PREDICT: Provide a clear prediction on "When" and "What" but keep it natural.
+4. TONE: Be helpful, professional, and conversational. 
+5. NO RIGID FORMAT: Don't use the same exact headers or structure every time. Use headings ONLY for clarity.
+6. NO PLACEHOLDERS: NEVER use placeholders like [Your Name], [Company Name], [Role], or anything in brackets [ ].
+7. NO SIGNATURES: DO NOT include any signatures, sign-offs, or footers like "Best regards," "Sincerely," "HR Analyst," or generic closing names.
+8. START DIRECTLY: Start your answer directly with the analysis or prediction. Keep the tone conversational.
+9. STRICT GROUNDING: ONLY use the Provided Context (Policies and Team Trends). If no data is found, admit it instead of guessing.
+"""
+    
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    state["response"] = response.content.strip()
+    state["actions"] = [
+        {"type": "info", "text": "🧠 Data & Policy Analysis Completed"}
+    ]
     return state
 
 
@@ -625,21 +881,49 @@ Return ONLY valid JSON:
 # ── Node 8: General Response ─────────────────────────────
 
 async def handle_general(state: AgentState) -> AgentState:
-    """Handle general or unclassifiable messages."""
+    """Handle general messages using ALL available context — employee data + policies + database."""
     llm = get_llm()
 
     emp_data = json.dumps(state.get("employee_data", {}), indent=2, default=str)
+    
+    # Use pre-cached policies
+    policy_context = await _get_policies_text(state)
+    
+    # Also try RAG for more specific policy matching
+    rag_answer = ""
+    try:
+        from app.services.rag_service import answer_from_policies
+        rag_result = await answer_from_policies(state["company_id"], state["current_input"])
+        if rag_result and "could not find" not in rag_result.lower() and "no relevant" not in rag_result.lower():
+            rag_answer = rag_result
+    except Exception:
+        pass
 
     prompt = f"""You are an HR Support AI assistant for {state['employee_name']} (Role: {state['role']}).
 
-You must ONLY respond based on company policies and employee data. Do NOT use any generic HR knowledge.
+You have access to THREE sources of information. Use ALL of them to give the best possible answer:
 
-Employee profile:
+1. EMPLOYEE DATABASE RECORD:
 {emp_data}
+
+2. COMPANY HR POLICIES & RULES:
+{policy_context or 'No policies loaded.'}
+
+3. POLICY SEARCH RESULT (if relevant):
+{rag_answer or 'No specific policy match found.'}
+
+STRICT RULES:
+- Use ALL available context (database + policies) to answer.
+- If a policy is relevant to the question, CITE it by name.
+- If employee data is relevant, reference specific values (leave balance, join date, etc.)
+- If the answer isn't in ANY of the sources above, say: "I don't have that specific information in your company's database or policies. Please contact your HR department or manager for assistance."
+- NO SIGNATURES: NEVER include sign-offs or placeholders.
+- START DIRECTLY: Provide the information immediately.
+- Be conversational and helpful, not robotic.
 
 The user said: "{state['current_input']}"
 
-If you can answer from the data, answer helpfully. If not, politely say you can help with policy queries, leave requests, status checks, or direct them to company support.
+Provide a well-informed response:
 """
     response = await llm.ainvoke([HumanMessage(content=prompt)])
     state["response"] = response.content.strip()
@@ -662,6 +946,7 @@ def route_intent(state: AgentState) -> str:
         "grievance": "approval_request",
         "approval_action": "general",
         "status_check": "status_check",
+        "predictive_analytics": "predictive_analytics",
         "support": "support",
         "general": "general",
     }
@@ -678,6 +963,7 @@ INTENT_HANDLER_MAP = {
     "resignation": handle_approval_request,
     "grievance": handle_approval_request,
     "status_check": handle_status_check,
+    "predictive_analytics": handle_predictive_analytics,
     "support": handle_support,
     "general": handle_general,
 }
@@ -735,6 +1021,7 @@ def build_agent_graph() -> StateGraph:
     graph.add_node("data_update", handle_data_update)
     graph.add_node("approval_request", handle_approval_request)
     graph.add_node("status_check", handle_status_check)
+    graph.add_node("predictive_analytics", handle_predictive_analytics)
     graph.add_node("support", handle_support)
     graph.add_node("general", handle_general)
     graph.add_node("combine_responses", combine_responses)
@@ -753,6 +1040,7 @@ def build_agent_graph() -> StateGraph:
             "data_update": "data_update",
             "approval_request": "approval_request",
             "status_check": "status_check",
+            "predictive_analytics": "predictive_analytics",
             "support": "support",
             "general": "general",
         },
@@ -760,7 +1048,7 @@ def build_agent_graph() -> StateGraph:
 
     # All primary handler nodes go to combine_responses (for multi-intent)
     for node in ["greeting", "policy_query", "data_query", "data_update",
-                  "approval_request", "status_check", "support", "general"]:
+                  "approval_request", "status_check", "predictive_analytics", "support", "general"]:
         graph.add_edge(node, "combine_responses")
     
     # combine_responses goes to END
@@ -809,6 +1097,7 @@ async def chat_with_agent(
         "employee_data": employee_data or {},
         "query_result": None,
         "policy_answer": None,
+        "company_policies": None,
         "approval_needed": False,
         "approval_request_type": None,
         "request_details": None,

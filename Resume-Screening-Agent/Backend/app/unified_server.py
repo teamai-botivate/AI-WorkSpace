@@ -79,6 +79,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "unified_recruitai"}
+
 # 4. Gmail OAuth Endpoints
 from fastapi import HTTPException, Query
 from fastapi.responses import RedirectResponse, HTMLResponse

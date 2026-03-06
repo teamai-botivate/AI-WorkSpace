@@ -4,10 +4,9 @@
  */
 
 import { useState, useCallback } from "react";
-import { ExternalLink, RefreshCw, Maximize2, Minimize2, AlertTriangle } from "lucide-react";
-import { ComingSoon } from "@/components/common/ComingSoon";
-import { getAgentIcon } from "@/utils/iconMap";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 import type { AgentConfig } from "@/types/workspace.types";
+import { ComingSoon } from "@/components/common/ComingSoon";
 
 interface AgentShellProps {
   agent: AgentConfig;
@@ -17,8 +16,6 @@ interface AgentShellProps {
 export function AgentShell({ agent, onBack }: AgentShellProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const Icon = getAgentIcon(agent.icon);
 
   // If the agent is "coming-soon", show placeholder
   if (agent.status !== "active") {
@@ -46,74 +43,14 @@ export function AgentShell({ agent, onBack }: AgentShellProps) {
     }
   };
 
-  const handleOpenExternal = () => {
-    window.open(iframeUrl, "_blank");
-  };
+
 
   return (
-    <div className={`animate-fade-in ${fullscreen ? "fixed inset-0 z-40 bg-white" : ""}`}>
-      {/* Agent Toolbar */}
-      <div
-        className="flex items-center justify-between px-4 py-2 border-b border-slate-200/60 bg-slate-50/80"
-        style={{ borderTop: `2px solid ${agent.gradient[0]}20` }}
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{
-              background: `linear-gradient(135deg, ${agent.gradient[0]}15, ${agent.gradient[1]}15)`,
-            }}
-          >
-            <Icon className="w-3.5 h-3.5" style={{ color: agent.gradient[0] }} />
-          </div>
-          <div>
-            <span className="text-sm font-medium text-slate-700">{agent.name}</span>
-            <span className="text-xs text-slate-400 ml-2">
-              {(agent.backend.deployed || agent.frontend.deployed) ? (
-                <span className="text-emerald-500">Deployed</span>
-              ) : (
-                <>Port {agent.frontend.port}</>
-              )}
-            </span>
-          </div>
-          {loading && (
-            <div className="flex items-center gap-1.5 text-xs text-brand-600 animate-pulse-soft">
-              <div className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
-              Loading...
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleRefresh}
-            className="btn-ghost !p-1.5 !rounded-lg"
-            title="Refresh"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setFullscreen(!fullscreen)}
-            className="btn-ghost !p-1.5 !rounded-lg"
-            title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {fullscreen ? (
-              <Minimize2 className="w-3.5 h-3.5" />
-            ) : (
-              <Maximize2 className="w-3.5 h-3.5" />
-            )}
-          </button>
-          <button
-            onClick={handleOpenExternal}
-            className="btn-ghost !p-1.5 !rounded-lg"
-            title="Open in new tab"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Error State */}
+    <div className="relative animate-fade-in flex flex-col h-full w-full">
+      {/* Loading Bar */}
+      {loading && !error && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-brand-500 animate-[pulse_1.5s_ease-in-out_infinite] z-50 shadow-[0_0_8px_rgba(var(--brand-500),0.5)]" />
+      )}      {/* Error State */}
       {error && (
         <div className="flex flex-col items-center justify-center h-[calc(100vh-130px)] gap-4">
           <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center">
@@ -150,7 +87,7 @@ export function AgentShell({ agent, onBack }: AgentShellProps) {
         src={iframeUrl}
         className={`agent-iframe ${error ? "hidden" : ""}`}
         style={{
-          height: fullscreen ? "calc(100vh - 48px)" : "calc(100vh - 112px)",
+          height: "calc(100vh - 64px)",
         }}
         onLoad={handleLoad}
         onError={handleError}

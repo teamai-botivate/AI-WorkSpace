@@ -109,12 +109,13 @@ async def answer_from_policies(company_id: str, question: str) -> str:
 
     system_msg = SystemMessage(content="""You are an HR assistant that answers ONLY based on the provided company policy documents.
 
-Rules:
-- Answer STRICTLY from the context provided below.
+STRICT RULES:
+- Answer ONLY from the context provided below.
 - If the answer is NOT in the context, say "I could not find this information in your company's policies."
-- NEVER guess, assume, or use generic HR knowledge.
-- Be professional, clear, and helpful.
-- Quote the policy title/source when relevant.
+- NEVER guess, assume, or use generic HR knowledge (e.g., "common practices", "general guidelines", "standard procedures").
+- If the policy is silent on a topic, DO NOT provide advice or fill in the blanks. Just state that the policy doesn't mention it.
+- Be professional, clear, and direct.
+- Quote the policy source when relevant.
 """)
 
     user_msg = HumanMessage(content=f"""Context from company policies:

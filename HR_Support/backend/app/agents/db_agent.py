@@ -3,13 +3,16 @@ Botivate HR Support — Database Operations Agent (Multi-Agent Architecture)
 A dedicated LangGraph agent that handles ALL CRUD operations on the company's 
 external database (Google Sheets, etc.)
 
+FULLY DYNAMIC: Reads ALL tables, understands schema, and AI decides which 
+table(s) to update/insert into. Zero hardcoded column names or table names.
+
 This agent is called as a SUB-AGENT by the HR Conversational Agent.
 It has its own LangGraph pipeline:
-  1. connect_and_read_schema → Connects to the sheet, reads headers
-  2. read_employee_data → Fetches the employee's current row
-  3. plan_updates → AI generates the exact update plan based on schema + context
-  4. execute_updates → Writes to the sheet
-  5. verify_updates → Re-reads the row to confirm changes were applied
+  1. connect_and_discover → Connects to DB, reads ALL tables & their headers
+  2. read_employee_data → Fetches the employee's data from relevant tables
+  3. plan_operations → AI generates multi-table operation plan (update + insert)
+  4. execute_operations → Writes to the correct table(s)
+  5. verify_operations → Re-reads to confirm changes
 """
 
 import json
@@ -34,16 +37,18 @@ class DBAgentState(TypedDict):
     action: str              # "leave_request_applied", "leave_request_approved", etc.
     context: Dict[str, Any]  # Rich context: dates, reason, decided_by, etc.
     
-    # Working state
-    headers: List[str]
-    employee_data: Dict[str, Any]
+    # Working state — MULTI-TABLE
+    all_tables: List[str]                         # All available table names
+    all_tables_headers: Dict[str, List[str]]      # {table_name: [headers]}
+    employee_data_by_table: Dict[str, Any]        # {table_name: [records] or record}
     primary_key: str
-    update_plan: Dict[str, Any]   # {"updates": {...}, "new_columns": [...]}
+    operation_plan: Dict[str, Any]                # AI-generated multi-table plan
     
     # Output
     success: bool
     updates_applied: Dict[str, Any]
     new_columns_created: List[str]
+    rows_inserted: Dict[str, Any]
     error: Optional[str]
     verification: Optional[Dict[str, Any]]
     retry_count: int
@@ -59,31 +64,38 @@ def get_db_llm() -> ChatOpenAI:
     )
 
 
-# ── Node 1: Connect & Read Schema ──────────────────────
+# ── Node 1: Connect & Discover ALL Tables ──────────────
 
-async def connect_and_read_schema(state: DBAgentState) -> DBAgentState:
-    """Connect to the database and read current headers/schema."""
+async def connect_and_discover(state: DBAgentState) -> DBAgentState:
+    """Connect to the database and read ALL tables and their headers."""
     try:
         adapter = await get_adapter(
             DatabaseType(state["db_type"]), 
             state["connection_config"]
         )
-        headers = await adapter.get_headers()
-        primary_key = state["schema_map"].get("primary_key", "")
         
+        primary_key = state["schema_map"].get("primary_key", "")
         if not primary_key:
             state["error"] = "No primary_key in schema_map. Cannot identify employee row."
             state["success"] = False
             return state
         
-        if primary_key not in headers:
-            state["error"] = f"Primary key column '{primary_key}' not found in sheet headers: {headers}"
-            state["success"] = False
-            return state
+        # Discover ALL tables
+        all_tables = await adapter.get_available_tables()
+        all_tables_headers = {}
         
-        state["headers"] = headers
+        for table_name in all_tables:
+            try:
+                headers = await adapter.get_headers(table_name=table_name)
+                if headers:  # Skip empty tables
+                    all_tables_headers[table_name] = headers
+            except Exception as e:
+                print(f"[DB AGENT] ⚠️ Could not read headers for '{table_name}': {e}")
+        
+        state["all_tables"] = all_tables
+        state["all_tables_headers"] = all_tables_headers
         state["primary_key"] = primary_key
-        print(f"[DB AGENT] ✅ Schema read: {len(headers)} columns, PK='{primary_key}'")
+        print(f"[DB AGENT] ✅ Discovered {len(all_tables_headers)} tables: {list(all_tables_headers.keys())}")
         
     except Exception as e:
         state["error"] = f"Connection failed: {str(e)}"
@@ -93,36 +105,72 @@ async def connect_and_read_schema(state: DBAgentState) -> DBAgentState:
     return state
 
 
-# ── Node 2: Read Employee's Current Data ────────────────
+# ── Node 2: Read Employee's Data From ALL Relevant Tables ─
 
 async def read_employee_data(state: DBAgentState) -> DBAgentState:
-    """Fetch the employee's current row from the sheet."""
+    """Fetch the employee's data from ALL tables where their ID appears."""
     if state.get("error"):
-        return state  # Skip if previous node failed
+        return state
     
     try:
         adapter = await get_adapter(
             DatabaseType(state["db_type"]),
             state["connection_config"]
         )
-        record = await adapter.get_record_by_key(state["primary_key"], state["employee_id"])
         
-        if not record:
-            # Fallback search
-            all_records = await adapter.get_all_records()
-            for rec in all_records:
-                rec_val = str(rec.get(state["primary_key"], "")).strip().lower()
-                if rec_val == str(state["employee_id"]).strip().lower():
-                    record = rec
-                    break
-
-        if not record:
-            state["error"] = f"Employee '{state['employee_id']}' not found in the sheet."
+        employee_data_by_table = {}
+        pk = state["primary_key"]
+        employee_id = state["employee_id"]
+        
+        # Determine master table
+        master_table = state["schema_map"].get("master_table")
+        
+        for table_name, headers in state["all_tables_headers"].items():
+            try:
+                all_records = await adapter.get_all_records(table_name=table_name)
+                
+                if table_name == master_table:
+                    # Master table: find the single employee record by PK
+                    record = None
+                    for rec in all_records:
+                        if str(rec.get(pk, "")).strip().lower() == str(employee_id).strip().lower():
+                            record = rec
+                            break
+                    if record:
+                        employee_data_by_table[table_name] = {"type": "master", "record": record}
+                        print(f"[DB AGENT] ✅ Master '{table_name}': found employee record")
+                else:
+                    # Child tables: find ALL rows matching employee_id in ANY column
+                    matching_rows = []
+                    for rec in all_records:
+                        for col_val in rec.values():
+                            if str(col_val).strip().lower() == str(employee_id).strip().lower():
+                                matching_rows.append(rec)
+                                break
+                    
+                    if matching_rows:
+                        employee_data_by_table[table_name] = {"type": "child", "records": matching_rows}
+                        print(f"[DB AGENT] ✅ Child '{table_name}': found {len(matching_rows)} matching rows")
+                    else:
+                        # Still include the table structure (with sample) for AI context
+                        employee_data_by_table[table_name] = {
+                            "type": "child", 
+                            "records": [],
+                            "sample_rows": all_records[:2] if len(all_records) <= 50 else all_records[:2],
+                            "total_rows": len(all_records)
+                        }
+                        print(f"[DB AGENT] ℹ️ Child '{table_name}': no matching rows (included schema for AI)")
+                        
+            except Exception as e:
+                print(f"[DB AGENT] ⚠️ Error reading '{table_name}': {e}")
+        
+        if master_table and master_table not in employee_data_by_table:
+            state["error"] = f"Employee '{employee_id}' not found in master table '{master_table}'."
             state["success"] = False
             return state
         
-        state["employee_data"] = record
-        print(f"[DB AGENT] ✅ Employee data read: {state['employee_id']} ({len(record)} fields)")
+        state["employee_data_by_table"] = employee_data_by_table
+        print(f"[DB AGENT] ✅ Employee data collected from {len(employee_data_by_table)} tables")
         
     except Exception as e:
         state["error"] = f"Read failed: {str(e)}"
@@ -132,65 +180,119 @@ async def read_employee_data(state: DBAgentState) -> DBAgentState:
     return state
 
 
-# ── Node 3: Plan Updates (AI generates the CRUD) ────────
+# ── Node 3: Plan Operations (AI generates multi-table CRUD) ─
 
-async def plan_updates(state: DBAgentState) -> DBAgentState:
-    """AI analyzes the schema, current data, and action context to generate the exact update plan."""
+async def plan_operations(state: DBAgentState) -> DBAgentState:
+    """AI analyzes ALL tables, current data, and action context to generate a multi-table operation plan."""
     if state.get("error"):
         return state
     
     try:
         if not settings.openai_api_key or settings.openai_api_key == "your-openai-api-key-here":
-            # Fallback without AI
-            state["update_plan"] = _fallback_plan(state["headers"], state["action"], state["context"])
+            state["operation_plan"] = _fallback_plan(state)
             return state
         
         llm = get_db_llm()
         
-        prompt = f"""You are an expert HR database administrator. Your task is to generate the EXACT updates to write to an employee's spreadsheet row.
+        # Build comprehensive context for AI
+        tables_context = {}
+        for table_name, data in state["employee_data_by_table"].items():
+            entry = {"headers": state["all_tables_headers"].get(table_name, [])}
+            if data["type"] == "master":
+                entry["employee_row"] = data["record"]
+            else:
+                entry["employee_matching_rows"] = data["records"]
+                if data.get("sample_rows"):
+                    entry["sample_rows_for_structure"] = data["sample_rows"]
+                entry["total_rows_in_table"] = data.get("total_rows", len(data["records"]))
+            tables_context[table_name] = entry
+        
+        # Also include tables with no employee data but that might need new rows
+        for table_name in state["all_tables_headers"]:
+            if table_name not in tables_context:
+                tables_context[table_name] = {
+                    "headers": state["all_tables_headers"][table_name],
+                    "note": "No employee data found in this table yet"
+                }
+        
+        prompt = f"""You are an expert HR database administrator managing a multi-table employee database.
 
-=== CURRENT SHEET COLUMNS ===
-{json.dumps(state['headers'])}
+=== ALL AVAILABLE TABLES AND THEIR DATA ===
+{json.dumps(tables_context, default=str, indent=2)}
 
-=== EMPLOYEE'S CURRENT ROW DATA ===
-{json.dumps(state['employee_data'], default=str, indent=2)}
-
-=== ACTION THAT OCCURRED ===
-"{state['action']}"
+=== PRIMARY KEY COLUMN === "{state['primary_key']}"
+=== EMPLOYEE ID === "{state['employee_id']}"
+=== ACTION THAT OCCURRED === "{state['action']}"
 
 === ACTION DETAILS ===
 {json.dumps(state['context'], default=str, indent=2)}
 
-LEAVE CALCULATION RULES (STRICT CONSISTENCY):
-1. If action is "leave_request_approved":
-   - Read the 'duration' or 'days' from ACTION DETAILS. (Let's call this 'X')
-   - Identify Numeric Columns: "Leaves Taken", "Leaves Remaining", "Days Taken", "Balance", etc.
-   - For "Taken" columns: New Value = Current Value + X.
-   - For "Remaining", "Balance", or "Available" columns: New Value = Current Value - X.
-   - If there is a "Total Entitlement" or "Carry Forward" column, do NOT change it (it's the max limit).
-   - Ensure the new values satisfy: [Total Entitlement] = [New Taken] + [New Remaining] (if all three exist).
-2. If action is "applied":
-   - Update "Status" to "Pending" or "Applied".
-   - Do NOT subtract or add to numeric balances yet.
-   - Update "Upcoming Leave" or "Last Action" columns with dates from context.
-3. If action is "rejected":
-   - Update "Status" to "Rejected".
-   - Do NOT change any balances.
+YOUR TASK:
+Analyze ALL tables and determine EXACTLY which table(s) need to be modified and how.
+You can perform TWO types of operations:
+1. **UPDATE**: Modify existing values in a row (e.g., update leave balance in master table)
+2. **INSERT**: Add a new row to a table (e.g., add a leave record entry in Leave_Record table)
 
-GENERAL RULES:
-1. USE EXACT COLUMN NAMES bit-for-bit from CURRENT SHEET COLUMNS.
-2. For dates (Last Leave From/To), use the format from existing row data (likely DD/MM/YYYY).
-3. Return final NUMBERS, not strings of math (e.g. 15, not "15 days").
-4. Never update the primary key column ("{state['primary_key']}").
+CRITICAL RULES:
+1. USE EXACT TABLE NAMES and COLUMN NAMES as they appear above — bit-for-bit match.
+2. For UPDATES: Match column names EXACTLY from the table's headers.
+3. For INSERTS: Use the column names from that table's headers. Fill in values logically.
+4. NEVER update the primary key column ("{state['primary_key']}").
+5. For numeric calculations (like deducting leave balance): Read the current value, calculate, return the final NUMBER.
+
+HOW TO DECIDE WHAT TO DO:
+- If action contains "applied" or "submitted": 
+  * Look for a tracking/record table (like "Leave_Record", "Attendance", etc.) and INSERT a new row with status "Pending"
+  * Update any status columns in the master table if they exist
+  * Do NOT change numeric balances yet (leave balance, etc.)
+
+- If action contains "approved":
+  * UPDATE the tracking/record table row's status to "Approved" (find the matching row)
+  * UPDATE the master table's numeric columns (e.g., deduct leave balance, increment leaves taken)
+  * If there's a "Leaves Taken" column: add the duration
+  * If there's a "Leaves Remaining" or "Balance" column: subtract the duration
+
+- If action contains "rejected":
+  * UPDATE only the status in any relevant table to "Rejected"
+  * Do NOT change any numeric balances
+
+- For "data_update": 
+  * UPDATE the specified values in the correct table
 
 === RESPONSE FORMAT ===
 Return ONLY valid JSON:
 {{
-  "updates": {{
-    "Exact Column Name": "new value or number"
-  }},
+  "operations": [
+    {{
+      "table": "Exact Table Name",
+      "type": "update",
+      "filters": {{
+        "Column1": "value to match row",
+        "Column2": "another value to narrow down"
+      }},
+      "updates": {{
+        "Column Name": "new value"
+      }}
+    }},
+    {{
+      "table": "Exact Table Name", 
+      "type": "insert",
+      "new_row": {{
+        "Column1": "value1",
+        "Column2": "value2"
+      }}
+    }}
+  ],
   "new_columns": []
 }}
+
+IMPORTANT FOR UPDATES:
+- Use "filters" with MULTIPLE columns to identify the EXACT row to update.
+- For child tables (like Leave_Record): ALWAYS include BOTH the employee ID column AND a status/date column in filters to find the specific row.
+  Example: {{"Employee_ID": "EMP002", "Approval Status": "Pending"}} to find the pending leave row.
+- For master table: Just include the primary key in filters: {{"{state['primary_key']}": "{state['employee_id']}"}}
+
+If no changes are needed, return {{"operations": [], "new_columns": []}}.
 No explanations. Only JSON."""
 
         resp = await llm.ainvoke([HumanMessage(content=prompt)])
@@ -203,42 +305,46 @@ No explanations. Only JSON."""
         if not isinstance(plan, dict):
             raise ValueError(f"Plan is not a dict: {type(plan)}")
         
-        plan.setdefault("updates", {})
+        plan.setdefault("operations", [])
         plan.setdefault("new_columns", [])
         
-        # Never update the primary key
-        plan["updates"].pop(state["primary_key"], None)
+        # Safety: never update the primary key in any operation
+        for op in plan["operations"]:
+            if op.get("type") == "update" and op.get("updates"):
+                op["updates"].pop(state["primary_key"], None)
         
-        state["update_plan"] = plan
-        print(f"[DB AGENT] ✅ Update plan generated: {len(plan['updates'])} updates, {len(plan['new_columns'])} new columns")
-        print(f"[DB AGENT] Plan details: {json.dumps(plan, default=str)}")
+        state["operation_plan"] = plan
+        print(f"[DB AGENT] ✅ Operation plan: {len(plan['operations'])} operations across tables")
+        for op in plan["operations"]:
+            print(f"[DB AGENT]   → {op['type'].upper()} on '{op['table']}': {json.dumps(op.get('updates') or op.get('new_row', {}), default=str)}")
         
     except json.JSONDecodeError as je:
         print(f"[DB AGENT] ⚠️ AI JSON parse error: {je}, using fallback")
-        state["update_plan"] = _fallback_plan(state["headers"], state["action"], state["context"])
+        state["operation_plan"] = _fallback_plan(state)
     except Exception as e:
         print(f"[DB AGENT] ⚠️ Plan error: {e}, using fallback")
-        state["update_plan"] = _fallback_plan(state["headers"], state["action"], state["context"])
+        state["operation_plan"] = _fallback_plan(state)
     
     return state
 
 
-# ── Node 4: Execute Updates ──────────────────────────────
+# ── Node 4: Execute Operations (Multi-Table) ────────────
 
-async def execute_updates(state: DBAgentState) -> DBAgentState:
-    """Execute the AI-generated update plan on the actual sheet."""
+async def execute_operations(state: DBAgentState) -> DBAgentState:
+    """Execute the AI-generated multi-table operation plan."""
     if state.get("error"):
         return state
     
-    plan = state.get("update_plan", {})
-    updates = plan.get("updates", {})
+    plan = state.get("operation_plan", {})
+    operations = plan.get("operations", [])
     new_columns = plan.get("new_columns", [])
     
-    if not updates and not new_columns:
+    if not operations and not new_columns:
         state["success"] = True
         state["updates_applied"] = {}
         state["new_columns_created"] = []
-        print("[DB AGENT] ℹ️ No updates needed")
+        state["rows_inserted"] = {}
+        print("[DB AGENT] ℹ️ No operations needed")
         return state
     
     try:
@@ -247,42 +353,93 @@ async def execute_updates(state: DBAgentState) -> DBAgentState:
             state["connection_config"]
         )
         
-        # Step 1: Create new columns first
+        all_updates = {}
+        all_inserts = {}
         created_cols = []
-        for col_name in new_columns:
-            if col_name and col_name not in state["headers"]:
+        
+        # Step 1: Create new columns first (if any)
+        for col_spec in new_columns:
+            if isinstance(col_spec, dict):
+                col_name = col_spec.get("column")
+                table_name = col_spec.get("table")
+            else:
+                col_name = col_spec
+                table_name = None
+            
+            if col_name:
                 try:
-                    await adapter.add_column(col_name)
-                    created_cols.append(col_name)
-                    print(f"[DB AGENT] ✅ Created column: '{col_name}'")
+                    existing_headers = await adapter.get_headers(table_name=table_name)
+                    if col_name not in existing_headers:
+                        await adapter.add_column(col_name, table_name=table_name)
+                        created_cols.append(f"{table_name or 'default'}:{col_name}")
+                        print(f"[DB AGENT] ✅ Created column '{col_name}' in '{table_name or 'default'}'")
                 except Exception as ce:
                     print(f"[DB AGENT] ⚠️ Failed to create column '{col_name}': {ce}")
         
-        # Refresh headers after creating columns
-        if created_cols:
-            state["headers"] = await adapter.get_headers()
-        
-        # Step 2: Execute the updates
-        if updates:
-            success = await adapter.update_record(
-                state["primary_key"], 
-                state["employee_id"], 
-                updates
-            )
+        # Step 2: Execute each operation
+        for op in operations:
+            table_name = op.get("table")
+            op_type = op.get("type", "update")
             
-            if success:
-                state["success"] = True
-                state["updates_applied"] = updates
-                state["new_columns_created"] = created_cols
-                print(f"[DB AGENT] ✅ Sheet UPDATED for {state['employee_id']}: {updates}")
-            else:
-                state["error"] = f"update_record returned False for employee {state['employee_id']}"
-                state["success"] = False
-                print(f"[DB AGENT] ❌ update_record returned False")
+            try:
+                if op_type == "update":
+                    updates = op.get("updates", {})
+                    filters = op.get("filters", {})
+                    
+                    if not updates:
+                        continue
+                    
+                    success = False
+                    if filters and len(filters) > 1:
+                        # Multi-filter matching (for child tables with duplicate keys)
+                        print(f"[DB AGENT] Using multi-filter update on '{table_name}': filters={filters}")
+                        success = await adapter.update_record_by_filters(
+                            filters, updates, table_name=table_name
+                        )
+                    elif filters:
+                        # Single filter — use standard update_record
+                        match_col = list(filters.keys())[0]
+                        match_val = list(filters.values())[0]
+                        success = await adapter.update_record(
+                            match_col, match_val, updates, table_name=table_name
+                        )
+                    else:
+                        # Legacy fallback — use PK
+                        match_col = op.get("match_column", state["primary_key"])
+                        match_val = op.get("match_value", state["employee_id"])
+                        success = await adapter.update_record(
+                            match_col, match_val, updates, table_name=table_name
+                        )
+                    
+                    if success:
+                        key = f"update:{table_name}"
+                        all_updates[key] = updates
+                        print(f"[DB AGENT] ✅ UPDATED '{table_name}': {updates}")
+                    else:
+                        print(f"[DB AGENT] ⚠️ update returned False for '{table_name}'")
+                elif op_type == "insert":
+                    new_row = op.get("new_row", {})
+                    if new_row:
+                        success = await adapter.create_record(new_row, table_name=table_name)
+                        if success:
+                            key = f"insert:{table_name}"
+                            all_inserts[key] = new_row
+                            print(f"[DB AGENT] ✅ INSERTED into '{table_name}': {new_row}")
+                        else:
+                            print(f"[DB AGENT] ⚠️ create_record returned False for '{table_name}'")
+                            
+            except Exception as op_err:
+                print(f"[DB AGENT] ❌ Operation failed on '{table_name}': {op_err}")
+        
+        state["success"] = bool(all_updates or all_inserts)
+        state["updates_applied"] = {**all_updates, **all_inserts}
+        state["rows_inserted"] = all_inserts
+        state["new_columns_created"] = created_cols
+        
+        if state["success"]:
+            print(f"[DB AGENT] ✅ All operations completed: {len(all_updates)} updates, {len(all_inserts)} inserts")
         else:
-            state["success"] = True
-            state["updates_applied"] = {}
-            state["new_columns_created"] = created_cols
+            state["error"] = "No operations succeeded"
             
     except Exception as e:
         state["error"] = f"Execute failed: {str(e)}"
@@ -292,14 +449,14 @@ async def execute_updates(state: DBAgentState) -> DBAgentState:
     return state
 
 
-# ── Node 5: Verify Updates ──────────────────────────────
+# ── Node 5: Verify Operations ──────────────────────────
 
-async def verify_updates(state: DBAgentState) -> DBAgentState:
-    """Re-read the employee's row to verify the updates were applied."""
+async def verify_operations(state: DBAgentState) -> DBAgentState:
+    """Re-read data to verify the operations were applied."""
     if not state.get("success"):
         # If execution failed, try retry
         retry = state.get("retry_count", 0)
-        if retry < 2 and state.get("update_plan"):
+        if retry < 2 and state.get("operation_plan"):
             state["retry_count"] = retry + 1
             state["error"] = None  # Clear error for retry
             print(f"[DB AGENT] 🔄 Retrying... attempt {retry + 1}")
@@ -312,35 +469,42 @@ async def verify_updates(state: DBAgentState) -> DBAgentState:
             state["connection_config"]
         )
         
-        updated_record = await adapter.get_record_by_key(
-            state["primary_key"], 
-            state["employee_id"]
-        )
-        
-        if updated_record:
-            # Verify each update was applied
-            verified = {}
-            failed = {}
-            for col, expected_val in state.get("updates_applied", {}).items():
-                actual_val = updated_record.get(col)
-                if str(actual_val).strip() == str(expected_val).strip():
-                    verified[col] = actual_val
+        # Verify master table updates
+        master_table = state["schema_map"].get("master_table")
+        if master_table:
+            updated_record = await adapter.get_record_by_key(
+                state["primary_key"], 
+                state["employee_id"],
+                table_name=master_table
+            )
+            
+            if updated_record:
+                update_key = f"update:{master_table}"
+                expected_updates = state.get("updates_applied", {}).get(update_key, {})
+                verified = {}
+                failed = {}
+                for col, expected_val in expected_updates.items():
+                    actual_val = updated_record.get(col)
+                    if str(actual_val).strip() == str(expected_val).strip():
+                        verified[col] = actual_val
+                    else:
+                        failed[col] = {"expected": expected_val, "actual": actual_val}
+                
+                state["verification"] = {
+                    "verified_count": len(verified),
+                    "failed_count": len(failed),
+                    "verified_fields": verified,
+                    "failed_fields": failed,
+                }
+                
+                if failed:
+                    print(f"[DB AGENT] ⚠️ Verification: {len(verified)} OK, {len(failed)} MISMATCH: {failed}")
                 else:
-                    failed[col] = {"expected": expected_val, "actual": actual_val}
-            
-            state["verification"] = {
-                "verified_count": len(verified),
-                "failed_count": len(failed),
-                "verified_fields": verified,
-                "failed_fields": failed,
-            }
-            
-            if failed:
-                print(f"[DB AGENT] ⚠️ Verification: {len(verified)} OK, {len(failed)} MISMATCH: {failed}")
+                    print(f"[DB AGENT] ✅ Verification: ALL {len(verified)} fields confirmed!")
             else:
-                print(f"[DB AGENT] ✅ Verification: ALL {len(verified)} fields confirmed!")
+                state["verification"] = {"note": "Could not re-read master record for verification"}
         else:
-            state["verification"] = {"error": "Could not re-read record for verification"}
+            state["verification"] = {"note": "No master table configured for verification"}
             
     except Exception as e:
         print(f"[DB AGENT] ⚠️ Verification error (non-critical): {e}")
@@ -360,15 +524,17 @@ def should_retry(state: DBAgentState) -> str:
 
 # ── Non-AI Fallback Plan ────────────────────────────────
 
-def _fallback_plan(headers: List[str], action: str, context: dict) -> dict:
-    """Generate basic update plan without AI."""
-    updates = {}
-    new_columns = []
+def _fallback_plan(state: DBAgentState) -> dict:
+    """Generate basic operation plan without AI — uses master table only."""
+    operations = []
     
     # Parse action type
+    action = state.get("action", "")
+    context = state.get("context", {})
+    master_table = state["schema_map"].get("master_table")
+    
     parts = action.split("_")
-    action_type = parts[0] if parts else "request"  # "leave", "grievance", etc.
-    action_status = parts[-1] if len(parts) > 1 else "applied"  # "applied", "approved", "rejected"
+    action_status = parts[-1] if len(parts) > 1 else "applied"
     
     status_value = {
         "applied": "Pending",
@@ -376,25 +542,26 @@ def _fallback_plan(headers: List[str], action: str, context: dict) -> dict:
         "rejected": "Rejected",
     }.get(action_status, "Pending")
     
-    # Find matching columns
-    for h in headers:
-        h_lower = h.lower()
-        if action_type in h_lower and "status" in h_lower:
-            updates[h] = status_value
-        if action_type in h_lower and "reason" in h_lower and context.get("reason"):
-            updates[h] = context["reason"]
-        if "upcoming" in h_lower and "from" in h_lower and context.get("start_date"):
-            updates[h] = context["start_date"]
-        if "upcoming" in h_lower and "to" in h_lower and context.get("end_date"):
-            updates[h] = context["end_date"]
+    # Try to update status columns in master table
+    if master_table and master_table in state.get("all_tables_headers", {}):
+        headers = state["all_tables_headers"][master_table]
+        updates = {}
+        
+        for h in headers:
+            h_lower = h.lower()
+            if "status" in h_lower and any(kw in h_lower for kw in ["leave", "request", "approval"]):
+                updates[h] = status_value
+        
+        if updates:
+            operations.append({
+                "table": master_table,
+                "type": "update",
+                "match_column": state["primary_key"],
+                "match_value": state["employee_id"],
+                "updates": updates
+            })
     
-    # If no status column found, create one
-    if not any("status" in k.lower() for k in updates):
-        col = f"{action_type.title()} Request Status"
-        new_columns.append(col)
-        updates[col] = status_value
-    
-    return {"updates": updates, "new_columns": new_columns}
+    return {"operations": operations, "new_columns": []}
 
 
 # ── Build the DB Agent Graph ─────────────────────────────
@@ -404,27 +571,27 @@ def build_db_agent_graph() -> StateGraph:
     graph = StateGraph(DBAgentState)
     
     # Add nodes
-    graph.add_node("connect_and_read_schema", connect_and_read_schema)
+    graph.add_node("connect_and_discover", connect_and_discover)
     graph.add_node("read_employee_data", read_employee_data)
-    graph.add_node("plan_updates", plan_updates)
-    graph.add_node("execute_updates", execute_updates)
-    graph.add_node("verify_updates", verify_updates)
+    graph.add_node("plan_operations", plan_operations)
+    graph.add_node("execute_operations", execute_operations)
+    graph.add_node("verify_operations", verify_operations)
     
     # Set entry point
-    graph.set_entry_point("connect_and_read_schema")
+    graph.set_entry_point("connect_and_discover")
     
     # Linear flow: connect → read → plan → execute → verify
-    graph.add_edge("connect_and_read_schema", "read_employee_data")
-    graph.add_edge("read_employee_data", "plan_updates")
-    graph.add_edge("plan_updates", "execute_updates")
-    graph.add_edge("execute_updates", "verify_updates")
+    graph.add_edge("connect_and_discover", "read_employee_data")
+    graph.add_edge("read_employee_data", "plan_operations")
+    graph.add_edge("plan_operations", "execute_operations")
+    graph.add_edge("execute_operations", "verify_operations")
     
     # After verify: retry or finish
     graph.add_conditional_edges(
-        "verify_updates",
+        "verify_operations",
         should_retry,
         {
-            "retry": "execute_updates",  # Retry from execute
+            "retry": "execute_operations",  # Retry from execute
             "done": END,
         },
     )
@@ -447,18 +614,18 @@ async def run_db_agent(
     context: dict,
 ) -> dict:
     """
-    Public entry point: run the Database Agent to perform a CRUD operation.
+    Public entry point: run the Database Agent to perform multi-table CRUD operations.
     
     Args:
         db_type: "google_sheets", "postgresql", etc.
         connection_config: Adapter connection config
-        schema_map: Schema map with primary_key, etc.
-        employee_id: Which employee's row to update
+        schema_map: Schema map with primary_key, master_table, child_tables, etc.
+        employee_id: Which employee's data to operate on
         action: "leave_request_applied", "leave_request_approved", etc.
         context: Rich context dict with details
     
     Returns:
-        {success, updates_applied, new_columns_created, error, verification}
+        {success, updates_applied, new_columns_created, rows_inserted, error, verification}
     """
     initial_state: DBAgentState = {
         "db_type": db_type,
@@ -467,19 +634,21 @@ async def run_db_agent(
         "employee_id": employee_id,
         "action": action,
         "context": context,
-        "headers": [],
-        "employee_data": {},
+        "all_tables": [],
+        "all_tables_headers": {},
+        "employee_data_by_table": {},
         "primary_key": "",
-        "update_plan": {},
+        "operation_plan": {},
         "success": False,
         "updates_applied": {},
         "new_columns_created": [],
+        "rows_inserted": {},
         "error": None,
         "verification": None,
         "retry_count": 0,
     }
     
-    print(f"\n[DB AGENT] 🚀 Starting DB Agent for {employee_id} | Action: {action}")
+    print(f"\n[DB AGENT] 🚀 Starting Multi-Table DB Agent for {employee_id} | Action: {action}")
     print(f"[DB AGENT] Context: {json.dumps(context, default=str)}")
     
     result = await db_agent_graph.ainvoke(initial_state)
@@ -488,6 +657,7 @@ async def run_db_agent(
         "success": result.get("success", False),
         "updates_applied": result.get("updates_applied", {}),
         "new_columns_created": result.get("new_columns_created", []),
+        "rows_inserted": result.get("rows_inserted", {}),
         "error": result.get("error"),
         "verification": result.get("verification"),
     }

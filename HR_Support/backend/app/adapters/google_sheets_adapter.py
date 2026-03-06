@@ -183,6 +183,71 @@ class GoogleSheetsAdapter(BaseDatabaseAdapter):
 
         return True
 
+    async def update_record_by_filters(self, filters: Dict[str, Any], updates: Dict[str, Any], table_name: Optional[str] = None) -> bool:
+        """Update a record matching MULTIPLE column-value filters. 
+        Finds the FIRST row where ALL filters match, then applies updates.
+        This is essential for child tables where a simple PK match isn't enough.
+        
+        Example: update_record_by_filters(
+            filters={"Employee_ID": "EMP002", "Approval Status": "Pending"},
+            updates={"Approval Status": "Approved"},
+            table_name="Leave_Record"
+        )
+        """
+        ws = self._get_target_worksheet(table_name)
+        headers = await self.get_headers(table_name)
+        
+        # Validate all filter columns exist
+        for col in filters:
+            if col not in headers:
+                print(f"[GOOGLE SHEETS] ⚠️ Filter column '{col}' not in headers")
+                return False
+        
+        # Find the row matching ALL filters
+        all_records = ws.get_all_records()
+        target_row = None
+        for idx, record in enumerate(all_records):
+            match = True
+            for col, val in filters.items():
+                record_val = str(record.get(col, "")).strip().lower()
+                filter_val = str(val).strip().lower()
+                if record_val != filter_val:
+                    match = False
+                    break
+            if match:
+                target_row = idx + 2  # +2 because row 1 is header, and idx is 0-based
+                break
+        
+        if not target_row:
+            print(f"[GOOGLE SHEETS] ❌ No row found matching filters: {filters}")
+            return False
+        
+        print(f"[GOOGLE SHEETS] ✅ Found matching row {target_row} for filters: {filters}")
+        
+        # Apply updates to this row
+        updates_list = []
+        for col_name, value in updates.items():
+            if col_name not in headers:
+                try:
+                    await self.add_column(col_name, table_name=table_name)
+                    headers = await self.get_headers(table_name)
+                except:
+                    continue
+            
+            if col_name in headers:
+                col_index = headers.index(col_name) + 1
+                col_letter = gspread.utils.rowcol_to_a1(target_row, col_index)
+                updates_list.append({
+                    'range': col_letter,
+                    'values': [[value]]
+                })
+        
+        if updates_list:
+            ws.batch_update(updates_list)
+            print(f"[GOOGLE SHEETS] ✅ Updated row {target_row}: {updates}")
+        
+        return True
+
     async def create_record(self, data: Dict[str, Any], table_name: Optional[str] = None) -> bool:
         """Create a new record (row) in the Google Sheet."""
         ws = self._get_target_worksheet(table_name)

@@ -91,3 +91,8 @@
 - workspace.config.json is the SINGLE SOURCE OF TRUTH
 - No hardcoded ports, names, or URLs anywhere
 - Frontend shell reads everything from config dynamically
+
+
+
+
+Analyse each and everything and then plan what to do where to do then apply the changes by which the system will work properly 

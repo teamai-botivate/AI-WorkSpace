@@ -1,0 +1,153 @@
+================================================================================
+  HR SUPPORT AGENT — SPEED OPTIMIZATION PLAN
+  Created: March 6, 2026
+================================================================================
+
+CURRENT PROBLEM:
+  Agent takes 8-15 seconds to respond per message.
+  Root cause: Too many sequential LLM calls + repeated DB fetches.
+
+================================================================================
+  WHAT HAPPENS NOW (FOR A SINGLE MESSAGE):
+================================================================================
+
+  1. chat_router.py fetches employee data from Google Sheets    (~1-2s)
+  2. chat_router.py fetches it AGAIN (duplicate call)           (~1-2s)
+  3. understand_intent() — LLM call #1 (huge prompt)            (~1-2s)
+  4. Primary handler (e.g. data_query) — LLM call #2            (~2-4s)
+  5. combine_responses() — runs ANOTHER handler — LLM call #3   (~2-4s)
+  6. For approval requests: 3 MORE LLM calls                    (~3-6s)
+     - verify action vs inquiry
+     - extract details
+     - analyze eligibility
+  7. Policy fallback: another LLM call if RAG fails             (~1-2s)
+
+  TOTAL: 5-7 LLM calls = 8-15 seconds per message!
+
+================================================================================
+  SOLUTION 1: REAL STREAMING (Best UX Win — Least Code Change)
+================================================================================
+
+  FILE: HR_Support/backend/app/routers/chat_router.py
+
+  WHAT TO DO:
+  - The /stream endpoint currently WAITS for the full response, then
+    fakes streaming by splitting words with asyncio.sleep(0.02)
+  - Change to use OpenAI's stream=True so tokens appear in <1 second
+  - User sees response building in real-time instead of waiting 10+ sec
+
+  HOW:
+  - Modify chat_with_agent() in hr_agent.py to support a streaming mode
+  - Use ChatOpenAI(streaming=True) with callback handler
+  - Yield tokens to the SSE endpoint as they arrive from OpenAI
+  - This means the LAST LLM call (the one generating the final reply)
+    should stream, while earlier calls (intent, extract) remain normal
+
+  IMPACT: Perceived latency drops from 10s → <1s (user sees tokens immediately)
+
+================================================================================
+  SOLUTION 2: REDUCE LLM CALLS (Biggest Actual Speed Win)
+================================================================================
+
+  FILE: HR_Support/backend/app/agents/hr_agent.py
+
+  WHAT TO DO:
+
+  A) Merge intent + response into fewer calls:
+     - Currently: Call #1 = classify intent, Call #2 = generate response
+     - Change: Single call that classifies intent AND generates response
+     - For simple intents (greeting, support, status_check) — no LLM needed at all!
+
+  B) handle_approval_request() has 3 LLM calls — merge into 1:
+     - Currently: verify_prompt + extract_prompt + analysis_prompt = 3 calls
+     - Change: One prompt that does all 3 tasks at once
+     - Return structured JSON with: {is_action: bool, details: {}, analysis: ""}
+
+  C) handle_general() calls RAG + LLM — if RAG already uses LLM, skip the 2nd
+  
+  D) handle_policy_query() has RAG call + fallback LLM call — streamline
+
+  IMPACT: 50-70% faster (from 5-7 calls → 1-2 calls per message)
+
+================================================================================
+  SOLUTION 3: CACHE DB DATA (Stop Repeated Google Sheets Fetches)
+================================================================================
+
+  FILES: HR_Support/backend/app/routers/chat_router.py
+         HR_Support/backend/app/agents/hr_agent.py
+
+  WHAT TO DO:
+
+  A) chat_router.py fetches employee_record TWICE — remove the duplicate
+     - Line ~160: first fetch
+     - Line ~253: second fetch (exact same data)
+     - Remove one of them
+
+  B) Add in-memory cache for Google Sheets data with 60-second TTL:
+     - Create a simple cache dict: {company_id: {data, timestamp}}
+     - If data was fetched <60 seconds ago, use cached version
+     - Google Sheets API is slow (~500ms-2s per call), caching saves 2-10s
+
+  C) Pass child table data through the pipeline instead of re-fetching:
+     - handle_data_query() fetches all child tables
+     - handle_approval_request() fetches child tables AGAIN
+     - Fetch ONCE at the start, pass via state
+
+  IMPACT: 30-50% faster
+
+================================================================================
+  SOLUTION 4: PARALLEL LLM CALLS (For Multi-Intent Messages)
+================================================================================
+
+  FILE: HR_Support/backend/app/agents/hr_agent.py
+
+  WHAT TO DO:
+  - combine_responses() currently runs secondary handlers SEQUENTIALLY
+  - Use asyncio.gather() to run them in PARALLEL
+  - Example: if intents = [data_query, policy_query], run both at once
+
+  IMPACT: 20-30% faster for multi-intent messages
+
+================================================================================
+  SOLUTION 5: SMALLER PROMPTS (Quick Win)
+================================================================================
+
+  FILE: HR_Support/backend/app/agents/hr_agent.py
+
+  WHAT TO DO:
+  - Intent classification prompt is ~100 lines — trim to ~30 lines
+  - Data query prompt sends FULL employee JSON + ALL child tables + ALL policies
+    — trim to only relevant fields
+  - Remove redundant examples from prompts
+  - Fewer tokens = faster LLM response
+
+  IMPACT: 15-25% faster
+
+================================================================================
+  IMPLEMENTATION ORDER (Recommended):
+================================================================================
+
+  PHASE 1 (Quick Wins — Do First):
+    [  ] Solution 3A — Remove duplicate DB fetch in chat_router.py
+    [  ] Solution 5  — Trim prompt sizes
+    [  ] Solution 2A — Skip LLM for simple intents (greeting, support, status)
+
+  PHASE 2 (Major Wins):
+    [  ] Solution 2B — Merge 3 LLM calls in approval handler into 1
+    [  ] Solution 3B — Add DB data cache with TTL
+    [  ] Solution 3C — Pass child table data through state
+
+  PHASE 3 (UX Win):
+    [  ] Solution 1  — Real OpenAI streaming
+
+  PHASE 4 (Polish):
+    [  ] Solution 4  — Parallel multi-intent handling
+
+================================================================================
+  EXPECTED RESULT AFTER ALL OPTIMIZATIONS:
+================================================================================
+
+  BEFORE: 8-15 seconds per response
+  AFTER:  2-4 seconds actual, <1 second perceived (with streaming)
+
+================================================================================

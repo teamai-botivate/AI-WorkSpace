@@ -17,6 +17,54 @@ from app.utils.email_service import send_oauth_email, NOTIFICATION_TEMPLATE
 from app.agents.hr_agent import get_llm
 from langchain_core.messages import HumanMessage
 
+# ── Dynamic Email Field Resolver ─────────────────────────
+
+def _find_email_field(data: dict, keywords: list = None, exclude_keywords: list = None) -> str | None:
+    """Dynamically find an email field from any record, regardless of column name.
+    
+    Scans all columns in the data dict and finds ones that look like email addresses.
+    Uses keyword matching on column names and value pattern matching.
+    
+    Args:
+        data: Employee record dict
+        keywords: Column name keywords to look for (e.g., ["email", "mail"])
+        exclude_keywords: Column name keywords to exclude (e.g., ["manager", "hr"])
+    """
+    import re
+    email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    keywords = keywords or ["email", "e-mail", "mail"]
+    exclude_keywords = exclude_keywords or []
+    
+    # Strategy 1: Find by column name keywords
+    candidates = []
+    for col_key, col_val in data.items():
+        k_lower = str(col_key).lower().strip()
+        val = str(col_val).strip()
+        
+        if not val or val.lower() in ("", "none", "nan", "null"):
+            continue
+        
+        # Check if column name matches any keyword
+        if any(kw in k_lower for kw in keywords):
+            # Check if it should be excluded
+            if exclude_keywords and any(ex in k_lower for ex in exclude_keywords):
+                continue
+            # Validate it looks like an email
+            if email_pattern.match(val):
+                candidates.append((col_key, val))
+    
+    if candidates:
+        return candidates[0][1]  # Return first matching email
+    
+    # Strategy 2: Find by value pattern (any column with a valid email)
+    if not exclude_keywords:  # Only for generic email search
+        for col_key, col_val in data.items():
+            val = str(col_val).strip()
+            if email_pattern.match(val):
+                return val
+    
+    return None
+
 # ── Generate Summary Report ──────────────────────────────
 
 async def generate_summary_report(db: AsyncSession, company_id: str, employee_id: str, request_type: str, context: str, request_details: dict) -> tuple[str, dict]:
@@ -103,16 +151,18 @@ async def create_approval_request(
     details = data.request_details or {}
     details["summary_report"] = summary_text
     
-    # Store emails from Google Sheets for guaranteed email routing
-    if "email" not in details:
-        emp_email = emp_data.get("Email") or emp_data.get("email") or emp_data.get("Employee Email") or emp_data.get("Personal Email")
+    # DYNAMIC EMAIL RESOLUTION — scan ALL columns for email-like fields
+    if "email" not in details and emp_data:
+        emp_email = _find_email_field(emp_data, keywords=["email", "e-mail", "mail"], 
+                                       exclude_keywords=["manager", "reporting", "supervisor", "hr", "admin"])
         if emp_email:
-            details["email"] = str(emp_email).strip()
+            details["email"] = emp_email
             
-    if "manager_email" not in details:
-        mgr_email = emp_data.get("Manager Email") or emp_data.get("manager_email") or emp_data.get("Reporting Manager Email") or emp_data.get("Manager Email ID")
+    if "manager_email" not in details and emp_data:
+        mgr_email = _find_email_field(emp_data, keywords=["manager email", "reporting manager email", 
+                                                           "supervisor email", "manager e-mail", "mgr email"])
         if mgr_email:
-            details["manager_email"] = str(mgr_email).strip()
+            details["manager_email"] = mgr_email
     
     request = ApprovalRequest(
         company_id=company_id,
@@ -228,8 +278,14 @@ async def process_decision(
     company = company_result.scalar_one_or_none()
     
     if company and company.google_refresh_token:
-        # Fallback to HR email if employee email is missing from details
-        emp_email = request.request_details.get("email", request.request_details.get("Email", company.hr_email)) if request.request_details else company.hr_email
+        # DYNAMIC email resolution from request details
+        emp_email = None
+        if request.request_details:
+            emp_email = _find_email_field(request.request_details, 
+                                          keywords=["email", "e-mail", "mail"],
+                                          exclude_keywords=["manager", "reporting", "supervisor", "hr"])
+        emp_email = emp_email or company.hr_email  # Fallback to HR email
+        print(f"[DECISION EMAIL] Sending decision notification to: {emp_email}")
         try:
             html_body = NOTIFICATION_TEMPLATE.render(
                 company_name=company.name,

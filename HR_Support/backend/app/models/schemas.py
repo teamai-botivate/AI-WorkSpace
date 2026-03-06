@@ -146,6 +146,7 @@ class TokenPayload(BaseModel):
 class ChatMessage(BaseModel):
     message: str
     attachments: Optional[List[str]] = None
+    history: Optional[List[Dict[str, str]]] = None  # [{role: "human"/"ai", content: "..."}]
 
 
 class ChatResponse(BaseModel):
