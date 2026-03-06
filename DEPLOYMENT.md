@@ -87,6 +87,130 @@ You need these credentials **before** deploying:
 | Google Service Account JSON | Google Cloud Console | HR Support → Google Sheets |
 | Google OAuth Client ID + Secret | Google Cloud Console | HR Support → Gmail sending |
 | SMTP credentials | Gmail App Password | Resume Screening → Email sending |
+| Gmail OAuth `client_secret.json` | Google Cloud Console | Resume Screening → Gmail inbox fetching |
+
+#### Step-by-Step: How to Get Each Credential
+
+**1. `OPENAI_API_KEY` (HR Support chatbot + Resume visual analysis)**
+
+1. Go to [platform.openai.com](https://platform.openai.com/)
+2. Sign in or create an account
+3. Navigate to **API Keys** → **Create new secret key**
+4. Copy the key (starts with `sk-proj-`)
+5. Add to **both** `.env` files:
+   - `HR_Support/backend/.env` → `OPENAI_API_KEY=sk-proj-...`
+   - `Resume-Screening-Agent/.env` → `OPENAI_API_KEY=sk-proj-...`
+
+> Pay-as-you-go pricing (~$0.15/1M tokens for GPT-4o-mini)
+
+**2. `GROQ_API_KEY` (Resume Screening — LLaMA models)**
+
+1. Go to [console.groq.com](https://console.groq.com/)
+2. Sign in or create an account
+3. Navigate to **API Keys** → **Create API Key**
+4. Copy the key (starts with `gsk_`)
+5. Add to `Resume-Screening-Agent/.env` → `GROQ_API_KEY=gsk_...`
+
+> Free generous tier available
+
+**3. `HUGGINGFACE_API_TOKEN` (Sentence embeddings)**
+
+1. Go to [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+2. Sign in or create an account
+3. Click **New token** → Set access to **Read**
+4. Copy the token (starts with `hf_`)
+5. Add to `Resume-Screening-Agent/.env` → `HUGGINGFACE_API_TOKEN=hf_...`
+
+> Free
+
+**4. Google Service Account JSON (HR Support → Google Sheets)**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or reuse an existing one
+3. Enable the **Google Sheets API**: APIs & Services → Library → search "Google Sheets API" → Enable
+4. Go to **APIs & Services → Credentials → Create Credentials → Service Account**
+5. Name it (e.g. `hr-support-sheets`) → click Create → Done
+6. Click the service account → **Keys** tab → **Add Key → Create new key → JSON**
+7. Download the JSON file → save as `HR_Support/backend/service-account.json`
+8. In `HR_Support/backend/.env`, set:
+   ```
+   GOOGLE_SERVICE_ACCOUNT_JSON=service-account.json
+   ```
+9. **Share your Google Sheet** with the service account email (e.g. `hr-support-sheets@project-id.iam.gserviceaccount.com`) as **Editor**
+
+**5. Google OAuth Client ID + Secret (HR Support → Gmail sending)**
+
+1. Same Google Cloud project as step 4
+2. Go to **APIs & Services → OAuth consent screen** → Configure:
+   - Select **External** → Create
+   - App Name: `Botivate HR Support`
+   - Add your support email and developer contact email
+   - Save and Continue
+3. **Add Scopes** → click "Add or Remove Scopes" → add the Gmail scopes your app needs → Save
+4. **Test Users** → add your email → Save and Continue
+5. Go to **Credentials → Create Credentials → OAuth client ID**
+6. Application type: **Web application**
+7. Add **Authorized redirect URI**: `http://localhost:5173/oauth/callback` (for dev) and your production URL
+8. Click **Create** → copy the **Client ID** and **Client Secret**
+9. Add to `HR_Support/backend/.env`:
+   ```
+   GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com
+   GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-...
+   GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5173/oauth/callback
+   ```
+
+**6. SMTP Credentials — Gmail App Password (Resume Screening → Email sending)**
+
+The Resume Screening Agent sends emails to candidates (assessment links, rejection notices) via SMTP.
+
+1. Go to [myaccount.google.com](https://myaccount.google.com/)
+2. Navigate to **Security → 2-Step Verification** → Turn it **ON** (required)
+3. After enabling 2FA, go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+4. Select app: **Mail**, device: **Windows** (or Other → name it "Hiring Suite")
+5. Click **Generate** → Google gives you a **16-character password** (e.g. `abcd efgh ijkl mnop`)
+6. Add to `Resume-Screening-Agent/.env`:
+   ```
+   SMTP_SERVER=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=your-email@gmail.com
+   SMTP_PASSWORD=abcdefghijklmnop
+   ```
+   > Remove spaces from the generated password
+
+**7. Gmail OAuth `client_secret.json` (Resume Screening → Gmail inbox fetching)**
+
+This lets the Resume Screening Agent **auto-fetch candidate resumes** from a Gmail inbox. This is a **separate** OAuth setup from step 5 — it uses a different scope (`gmail.readonly`) and a different redirect URI.
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) → same or new project
+2. Enable the **Gmail API**: APIs & Services → Library → search "Gmail API" → **Enable**
+3. Configure **OAuth consent screen**:
+   - Select **External** → Create
+   - App Name: `Agentic Hiring Suite`
+   - Add support and developer contact emails
+   - Save and Continue
+4. **Add Scopes** → click "Add or Remove Scopes" → manually add:
+   ```
+   https://www.googleapis.com/auth/gmail.readonly
+   ```
+   → click "Add to Table" → Update → Save and Continue
+5. **Test Users** → add your hiring email (e.g. `hiring@yourcompany.com`) → Save
+6. Go to **Credentials → Create Credentials → OAuth client ID**
+7. Application type: **Web application**
+8. Name: `Hiring Suite Web Client`
+9. Add **Authorized redirect URI**:
+   ```
+   http://localhost:8000/auth/gmail/callback
+   ```
+   For production, also add: `https://yourdomain.com/auth/gmail/callback`
+10. Click **Create** → click **"DOWNLOAD JSON"**
+11. Rename the downloaded file to exactly `client_secret.json`
+12. Place it in `Resume-Screening-Agent/Backend/client_secret.json`
+13. Start the server → open `http://localhost:8000` → click **"Connect Gmail"**
+14. Sign in with your hiring email → authorize → token auto-saves to `Backend/tokens/`
+
+> This is a **one-time setup**. The token refreshes automatically. The system only gets **read-only** access — it cannot send, delete, or modify emails. You can revoke access anytime from [Google Account Permissions](https://myaccount.google.com/permissions).
+
+> **Key Check:** The downloaded JSON must start with `"web"` (not `"installed"`). Web type supports browser-based OAuth redirect.
 
 ### 2.3 Build Frontends
 
