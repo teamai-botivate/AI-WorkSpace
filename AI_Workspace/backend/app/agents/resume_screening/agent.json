@@ -1,0 +1,27 @@
+{
+  "name": "HR Recruiter & Screener",
+  "description": "JD Generation, Resume Screening, AI Scoring & Automated Outreach with multi-stage pipeline",
+  "version": "1.0.0",
+  "icon": "UserSearch",
+  "gradient": ["#3b82f6", "#1d4ed8"],
+  "category": "Human Resources",
+  "features": [
+    "JD Generator",
+    "Resume Screening",
+    "Aptitude Tests",
+    "Email Automation",
+    "Gmail Integration",
+    "Visual Resume Analysis"
+  ],
+  "enabled": true,
+  "required_env_keys": [
+    "GROQ_API_KEY"
+  ],
+  "optional_env_keys": [
+    "HUGGINGFACE_API_TOKEN",
+    "GOOGLE_OAUTH_CLIENT_ID",
+    "GOOGLE_OAUTH_CLIENT_SECRET",
+    "SMTP_USER",
+    "SMTP_PASSWORD"
+  ]
+}

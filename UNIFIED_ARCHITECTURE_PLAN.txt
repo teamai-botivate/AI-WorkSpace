@@ -1,0 +1,257 @@
+===============================================================
+  BOTIVATE AI WORKSPACE — UNIFIED ARCHITECTURE PLAN
+  White-Label, Plugin-Based, Production-Ready
+===============================================================
+
+GOAL:
+  One backend, one frontend, multiple AI agents as plugins.
+  Any company clones it, fills in their keys, deploys with
+  one command, and gets their own branded AI workspace.
+  Agents can be added or removed without touching any other code.
+
+===============================================================
+STEP 1: CREATE UNIFIED BACKEND
+===============================================================
+- One FastAPI server, one port (8000)
+- plugin_loader.py scans backend/app/agents/ folder at startup
+- Each agent folder has:
+    - agent.json (name, icon, description, required env keys)
+    - __init__.py (exports router)
+    - routers/ (API endpoints)
+    - services/ (business logic)
+    - models/ (database models)
+- If an agent folder exists and is enabled → it loads automatically
+- If it's missing or has bad credentials → it's skipped, rest keeps running
+- Shared core/ folder for:
+    - auth.py (JWT, sessions)
+    - email.py (unified SMTP sender)
+    - llm.py (OpenAI/Groq clients)
+    - google_sheets.py (Sheets integration)
+    - google_oauth.py (OAuth helpers)
+  Agents reuse these — no code duplication
+
+===============================================================
+STEP 2: CREATE UNIFIED FRONTEND
+===============================================================
+- One React app, one dashboard
+- Dashboard fetches GET /api/agents → renders cards for loaded agents
+- Each agent's pages live in frontend/src/agents/{agent_name}/
+- Lazy loaded — only downloads when user clicks into that agent
+- Company name, logo, colors come from config — nothing hardcoded
+- Resume Screening's existing HTML/JS can be served as static files
+  from its agent folder (no rewrite needed)
+
+===============================================================
+STEP 3: MOVE EXISTING AGENTS INTO PLUGIN STRUCTURE
+===============================================================
+- HR Support backend code → backend/app/agents/hr_support/
+- Resume Screening backend code → backend/app/agents/resume_screening/
+- HR Support React pages → frontend/src/agents/hr_support/
+- Resume Screening HTML/JS → backend/app/agents/resume_screening/static/
+- Merge both requirements.txt into one
+- All functionality stays exactly the same — just reorganized
+
+===============================================================
+STEP 4: SINGLE .env + CREDENTIALS FOLDER
+===============================================================
+- One .env at the root — all API keys, SMTP, Google OAuth, JWT secrets
+- One credentials/ folder — company drops their Google JSON files here
+- .env.example ships as a template — company copies and fills in values
+
+.env contents:
+  APP_NAME, APP_URL, APP_SECRET_KEY
+  OPENAI_API_KEY, GROQ_API_KEY, HUGGINGFACE_API_TOKEN
+  GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET
+  SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
+  DATABASE_URL, JWT_SECRET_KEY
+
+credentials/ folder:
+  credentials/google/service-account.json
+  credentials/google/client_secret.json
+  credentials/tokens/ (auto-generated after OAuth)
+
+===============================================================
+STEP 5: workspace.config.json — BRANDING + AGENT CONTROL
+===============================================================
+- Company name, logo, primary color, favicon
+- Which agents to enable/disable
+- Feature flags (gmail_integration, email_notifications, etc.)
+- No code changes needed — just edit this JSON file
+- Frontend reads it at runtime and adapts
+
+Example:
+  {
+    "company": {
+      "name": "Acme Corp",
+      "logo": "/assets/logo.png",
+      "primaryColor": "#2563eb"
+    },
+    "agents": {
+      "hr_support": { "enabled": true, "displayName": "HR Support Bot" },
+      "resume_screening": { "enabled": true, "displayName": "Smart Recruiter" }
+    }
+  }
+
+===============================================================
+STEP 6: DOCKER COMPOSE — ONE COMMAND DEPLOY
+===============================================================
+- Dockerfile builds backend + frontend into one image
+- nginx.conf routes everything through one URL:
+    /           → Main Dashboard (React build)
+    /hr-support → HR Support pages
+    /resume     → Resume Screening pages
+    /api/*      → Backend API
+- docker-compose up -d --build → entire system is live
+- Persistent data in Docker volumes (DB, uploads, chroma)
+
+===============================================================
+STEP 7: SHIP IT
+===============================================================
+- Push to GitHub
+- Any company: clone → edit .env → edit workspace.config.json
+  → drop credentials → docker-compose up → done
+- Their own branded AI Workspace in 10-15 minutes
+
+===============================================================
+ADDING A NEW AGENT (FUTURE)
+===============================================================
+1. Create folder: backend/app/agents/new_agent/
+2. Add: agent.json + __init__.py + routers/ + services/
+3. Optionally add frontend: frontend/src/agents/new_agent/
+4. Restart server
+5. Agent appears on dashboard automatically
+
+===============================================================
+REMOVING AN AGENT
+===============================================================
+1. Delete the folder
+   OR set "enabled": false in agent.json
+   OR add to disabled list in workspace.config.json
+2. Restart server
+3. Gone from dashboard. No other agent affected. Zero code changes.
+
+===============================================================
+KEY PRODUCTION FEATURES
+===============================================================
+- Agent health independence: one broken agent never crashes the system
+- Per-agent DB isolation: each agent has its own data folder
+- Dependency validation: agent.json declares required env keys,
+  plugin_loader checks before mounting
+- Agent versioning: each agent.json has a version field
+- Agent registry API: GET /api/agents returns all agents + status
+- Graceful degradation: missing credentials = agent skipped with
+  clear log message, not a cryptic crash
+
+===============================================================
+POTENTIAL DEPLOYMENT ISSUES & SOLUTIONS
+===============================================================
+
+1. RAM (4-6 GB needed)
+   → Use 4GB+ server ($20-24/mo DigitalOcean or AWS t3.medium)
+   → Lazy-load heavy ML models on first request
+
+2. Dependency conflicts between agents
+   → Merge requirements.txt carefully, test with one venv
+   → Most likely compatible since both are recent
+
+3. Single point of failure
+   → Use uvicorn --workers 2
+   → Global exception handlers
+   → Plugin loader wraps each agent in try/catch
+
+4. Database table conflicts
+   → Per-agent DB files in data/agents/{agent_name}/
+   → Shared core.db only for auth/sessions
+
+5. Heavy tasks blocking other agents
+   → FastAPI BackgroundTasks for heavy operations
+   → Multiple uvicorn workers
+
+6. Google OAuth redirect URI changes
+   → Update once in Google Cloud Console
+   → /api/hr-support/oauth/callback
+   → /api/resume-screening/auth/gmail/callback
+
+7. Static file routing
+   → Nginx routes by path prefix, no conflicts
+
+8. Docker image size (3-5 GB)
+   → Multi-stage Docker build → brings down to 1.5-2 GB
+
+===============================================================
+FOLDER STRUCTURE — FINAL
+===============================================================
+
+AI_Workspace/
+├── .env.example
+├── .env                          (gitignored)
+├── workspace.config.json
+├── docker-compose.yml
+├── Dockerfile
+├── nginx.conf
+│
+├── credentials/
+│   ├── google/
+│   │   ├── service-account.json
+│   │   └── client_secret.json
+│   ├── tokens/                   (auto-generated)
+│   └── README.md
+│
+├── data/                         (gitignored, Docker volume)
+│   ├── workspace.db
+│   ├── chroma/
+│   ├── uploads/
+│   └── agents/
+│       ├── hr_support/
+│       └── resume_screening/
+│
+├── backend/
+│   ├── requirements.txt          (one combined file)
+│   └── app/
+│       ├── main.py               (single FastAPI entry point)
+│       ├── config.py             (loads .env + workspace.config.json)
+│       ├── plugin_loader.py      (discovers, validates, mounts agents)
+│       │
+│       ├── core/                 (shared services)
+│       │   ├── auth.py
+│       │   ├── email.py
+│       │   ├── llm.py
+│       │   ├── google_sheets.py
+│       │   └── google_oauth.py
+│       │
+│       └── agents/
+│           ├── hr_support/
+│           │   ├── __init__.py
+│           │   ├── agent.json
+│           │   ├── routers/
+│           │   ├── services/
+│           │   └── models/
+│           │
+│           └── resume_screening/
+│               ├── __init__.py
+│               ├── agent.json
+│               ├── routers/
+│               ├── services/
+│               ├── models/
+│               └── static/       (HTML/JS frontend)
+│
+├── frontend/
+│   ├── package.json
+│   └── src/
+│       ├── App.tsx
+│       ├── config/
+│       │   └── useWorkspaceConfig.ts
+│       ├── components/
+│       │   ├── layout/           (dynamic header — logo, name from config)
+│       │   ├── dashboard/        (agent cards from /api/agents)
+│       │   └── common/
+│       └── agents/
+│           ├── hr_support/       (lazy loaded React pages)
+│           └── resume_screening/ (if converted to React)
+│
+└── docs/
+    ├── DEPLOYMENT.md
+    ├── CREDENTIALS_GUIDE.md
+    └── CUSTOMIZATION.md
+
+===============================================================

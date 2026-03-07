@@ -1,0 +1,25 @@
+{
+  "name": "HR Employee Support",
+  "description": "Leave Management, Policy Queries, Grievances & Approval Workflows powered by LangGraph + RAG",
+  "version": "1.0.0",
+  "icon": "Headphones",
+  "gradient": ["#10b981", "#059669"],
+  "category": "Human Resources",
+  "features": [
+    "Leave Management",
+    "Policy RAG",
+    "Approval Workflows",
+    "Employee Lifecycle",
+    "Multi-company Support"
+  ],
+  "enabled": true,
+  "required_env_keys": [
+    "OPENAI_API_KEY",
+    "JWT_SECRET_KEY"
+  ],
+  "optional_env_keys": [
+    "GOOGLE_SERVICE_ACCOUNT_JSON",
+    "SMTP_USER",
+    "SMTP_PASSWORD"
+  ]
+}

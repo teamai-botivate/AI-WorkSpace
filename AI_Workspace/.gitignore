@@ -1,0 +1,47 @@
+# Dependencies
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+node_modules/
+.venv/
+
+# Environment
+.env
+*.env.local
+
+# Data (Docker volumes)
+data/
+*.db
+*.sqlite3
+
+# Credentials (sensitive)
+credentials/google/service-account.json
+credentials/google/client_secret.json
+credentials/tokens/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+frontend/dist/
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# ChromaDB data
+chroma_data/
+
+# Uploads
+uploads/

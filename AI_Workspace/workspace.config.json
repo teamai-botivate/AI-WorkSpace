@@ -1,0 +1,53 @@
+{
+  "company": {
+    "name": "Botivate",
+    "tagline": "Software and Automation",
+    "logo": "\"C:\\Users\\prabh\\Downloads\\B PNG.png\"",
+    "favicon": "/assets/favicon.ico",
+    "primaryColor": "#3b82f6",
+    "accentColor": "#8b5cf6",
+    "mode": "light"
+  },
+  "agents": {
+    "hr_support": {
+      "enabled": true,
+      "displayName": "HR Employee Support",
+      "description": "Leave Management, Policy Queries, Grievances & Approval Workflows",
+      "icon": "Headphones",
+      "gradient": [
+        "#10b981",
+        "#059669"
+      ],
+      "category": "Human Resources",
+      "features": [
+        "Leave Management",
+        "Policy RAG",
+        "Approval Workflows",
+        "Employee Lifecycle"
+      ]
+    },
+    "resume_screening": {
+      "enabled": true,
+      "displayName": "HR Recruiter & Screener",
+      "description": "JD Generation, Resume Screening, AI Scoring & Automated Outreach",
+      "icon": "UserSearch",
+      "gradient": [
+        "#3b82f6",
+        "#1d4ed8"
+      ],
+      "category": "Human Resources",
+      "features": [
+        "JD Generator",
+        "Resume Screening",
+        "Aptitude Tests",
+        "Email Automation"
+      ]
+    }
+  },
+  "features": {
+    "gmail_integration": true,
+    "email_notifications": true,
+    "google_sheets_sync": true
+  },
+  "setup_completed": true
+}
